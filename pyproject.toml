@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cookie-http-seeder"
+version = "0.1.0"
+description = "Session seeder for Cookie-HTTP crawlers: Chrome extension → loopback receiver → cookie_header files"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "SongYuanKun" }]
+keywords = ["cookies", "chrome-extension", "crawler", "http", "session"]
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Internet :: WWW/HTTP",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+cookie-http-seeder = "cookie_http_seeder.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["cookie_http_seeder*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

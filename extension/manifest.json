@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Cookie HTTP Seeder",
+  "version": "0.1.0",
+  "description": "Push allow-listed site cookies to a Cookie-HTTP crawler receiver.",
+  "permissions": ["cookies", "storage", "alarms", "notifications"],
+  "host_permissions": [
+    "*://*.ke.com/*",
+    "*://*.lianjia.com/*",
+    "*://*.fang.com/*",
+    "*://*.soufun.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Push crawler cookies",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

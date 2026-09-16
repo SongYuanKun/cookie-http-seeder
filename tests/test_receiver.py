@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import json
+import threading
+import unittest
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+
+from cookie_http_seeder.receiver import (
+    build_handler,
+    configure,
+    cookies_to_header,
+    ensure_token_file,
+)
+from cookie_http_seeder.store import load_cookie_header, load_sources, save_cookie_header
+
+
+class StoreTests(unittest.TestCase):
+    def test_roundtrip(self) -> None:
+        path = Path(self._testMethodName + ".json")
+        self.addCleanup(lambda: path.unlink(missing_ok=True))
+        save_cookie_header("a=1; b=2", path, updated_at="2026-09-16T00:00:00Z")
+        self.assertEqual(load_cookie_header(path), "a=1; b=2")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["updatedAt"], "2026-09-16T00:00:00Z")
+
+    def test_load_sources(self) -> None:
+        sources = load_sources(Path("examples/sources.json"))
+        self.assertIn("fang", sources)
+        self.assertIn("beike", sources)
+
+
+class ReceiverTests(unittest.TestCase):
+    def test_cookies_to_header_dedupes(self) -> None:
+        self.assertEqual(
+            cookies_to_header(
+                [
+                    {"name": "a", "value": "1"},
+                    {"name": "b", "value": "2"},
+                    {"name": "a", "value": "3"},
+                ]
+            ),
+            "a=1; b=2",
+        )
+
+    def test_http_auth_and_push(self) -> None:
+        import urllib.error
+        import urllib.request
+
+        data_dir = Path(self._testMethodName + "-data")
+        data_dir.mkdir(exist_ok=True)
+        self.addCleanup(lambda: __import__("shutil").rmtree(data_dir, ignore_errors=True))
+        configure(sources={"fang": {"domains": [".fang.com"]}}, data_dir=data_dir)
+        token = "test-token-0123456789ab"
+        server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler(token))
+        port = server.server_address[1]
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        base = f"http://127.0.0.1:{port}"
+
+        with urllib.request.urlopen(f"{base}/healthz", timeout=3) as response:
+            self.assertEqual(response.status, 200)
+
+        request = urllib.request.Request(
+            f"{base}/v1/cookies",
+            data=json.dumps({"source": "fang", "cookie_header": "k=v"}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            urllib.request.urlopen(request, timeout=3)
+        self.assertEqual(raised.exception.code, 401)
+
+        request = urllib.request.Request(
+            f"{base}/v1/cookies",
+            data=json.dumps({"source": "fang", "cookie_header": "k=v"}).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=3) as response:
+            body = json.loads(response.read())
+        self.assertTrue(body["ok"])
+        self.assertEqual(load_cookie_header(source="fang", data_dir=data_dir), "k=v")
+
+    def test_ensure_token_file(self) -> None:
+        path = Path(self._testMethodName + "-token")
+        self.addCleanup(lambda: path.unlink(missing_ok=True))
+        first = ensure_token_file(path)
+        second = ensure_token_file(path)
+        self.assertEqual(first, second)
+
+
+if __name__ == "__main__":
+    unittest.main()
