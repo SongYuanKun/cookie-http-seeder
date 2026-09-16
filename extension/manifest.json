@@ -3,7 +3,12 @@
   "name": "Cookie HTTP Seeder",
   "version": "0.1.0",
   "description": "Push allow-listed site cookies to a Cookie-HTTP crawler receiver.",
-  "permissions": ["cookies", "storage", "alarms", "notifications"],
+  "permissions": [
+    "cookies",
+    "storage",
+    "alarms",
+    "notifications"
+  ],
   "host_permissions": [
     "*://*.ke.com/*",
     "*://*.lianjia.com/*",
@@ -12,7 +17,10 @@
     "http://127.0.0.1/*",
     "http://localhost/*"
   ],
-  "optional_host_permissions": ["https://*/*", "http://*/*"],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"

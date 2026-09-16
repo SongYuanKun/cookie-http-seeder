@@ -1,0 +1,7 @@
+{
+  "sources": {
+    "mysite": {
+      "domains": [".example.com", "example.com"]
+    }
+  }
+}

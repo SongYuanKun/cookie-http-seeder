@@ -18,7 +18,6 @@ from .store import (
     cookie_path_for_source,
     default_data_dir,
     load_cookie_header,
-    load_sources,
     save_cookie_header,
 )
 

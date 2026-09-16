@@ -12,14 +12,29 @@ license = { text = "MIT" }
 authors = [{ name = "SongYuanKun" }]
 keywords = ["cookies", "chrome-extension", "crawler", "http", "session"]
 classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Software Development :: Libraries",
+  "Typing :: Typed",
 ]
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/SongYuanKun/cookie-http-seeder"
+Repository = "https://github.com/SongYuanKun/cookie-http-seeder"
+Issues = "https://github.com/SongYuanKun/cookie-http-seeder/issues"
+Changelog = "https://github.com/SongYuanKun/cookie-http-seeder/blob/main/CHANGELOG.md"
 
 [project.scripts]
 cookie-http-seeder = "cookie_http_seeder.cli:main"
@@ -27,5 +42,16 @@ cookie-http-seeder = "cookie_http_seeder.cli:main"
 [tool.setuptools.packages.find]
 include = ["cookie_http_seeder*"]
 
+[tool.setuptools.package-data]
+cookie_http_seeder = ["resources/*.json", "py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

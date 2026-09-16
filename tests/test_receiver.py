@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import threading
 import unittest
+import urllib.error
+import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 from cookie_http_seeder.receiver import (
     build_handler,
@@ -24,10 +29,19 @@ class StoreTests(unittest.TestCase):
         payload = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(payload["updatedAt"], "2026-09-16T00:00:00Z")
 
-    def test_load_sources(self) -> None:
+    def test_load_sources_from_examples(self) -> None:
         sources = load_sources(Path("examples/sources.json"))
         self.assertIn("fang", sources)
         self.assertIn("beike", sources)
+
+    def test_load_sources_packaged_fallback(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("COOKIE_HTTP_SEEDER_SOURCES", None)
+            with mock.patch("cookie_http_seeder.store._REPO_ROOT", Path("/nonexistent")):
+                with mock.patch("cookie_http_seeder.store.Path.cwd", return_value=Path("/tmp")):
+                    sources = load_sources()
+        self.assertIn("fang", sources)
+        self.assertTrue(sources["fang"]["domains"])
 
 
 class ReceiverTests(unittest.TestCase):
@@ -44,12 +58,9 @@ class ReceiverTests(unittest.TestCase):
         )
 
     def test_http_auth_and_push(self) -> None:
-        import urllib.error
-        import urllib.request
-
         data_dir = Path(self._testMethodName + "-data")
         data_dir.mkdir(exist_ok=True)
-        self.addCleanup(lambda: __import__("shutil").rmtree(data_dir, ignore_errors=True))
+        self.addCleanup(lambda: shutil.rmtree(data_dir, ignore_errors=True))
         configure(sources={"fang": {"domains": [".fang.com"]}}, data_dir=data_dir)
         token = "test-token-0123456789ab"
         server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler(token))

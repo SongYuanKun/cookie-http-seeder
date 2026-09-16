@@ -9,6 +9,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from .store import default_data_dir
+
 _HOOK = re.compile(
     r"https://open\.feishu\.cn/open-apis/bot/v2/hook/"
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
@@ -26,8 +28,7 @@ def resolve_webhook_path(explicit: Path | None = None) -> Path | None:
     env = os.environ.get("COOKIE_HTTP_SEEDER_WEBHOOK_FILE", "").strip()
     if env:
         return Path(env)
-    root = Path(__file__).resolve().parents[1]
-    candidate = root / "data" / "feishu-webhook"
+    candidate = default_data_dir() / "feishu-webhook"
     try:
         if candidate.exists():
             return candidate

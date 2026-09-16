@@ -3,24 +3,46 @@ from __future__ import annotations
 import json
 import os
 import re
+from importlib import resources
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATA_DIR = ROOT / "data"
-DEFAULT_SOURCES_PATH = ROOT / "examples" / "sources.json"
+_PACKAGE_ROOT = Path(__file__).resolve().parent
+_REPO_ROOT = _PACKAGE_ROOT.parent
 _SOURCE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
 def default_data_dir() -> Path:
+    """Cookie/token directory: env override, else ``./data`` under the process CWD."""
     env = os.environ.get("COOKIE_HTTP_SEEDER_DATA", "").strip()
-    return Path(env) if env else DEFAULT_DATA_DIR
+    return Path(env) if env else Path.cwd() / "data"
+
+
+def _read_default_sources_text() -> str:
+    env = os.environ.get("COOKIE_HTTP_SEEDER_SOURCES", "").strip()
+    if env:
+        return Path(env).read_text(encoding="utf-8")
+
+    # Prefer editable/git checkout examples so local edits take effect
+    for candidate in (
+        _REPO_ROOT / "examples" / "sources.json",
+        Path.cwd() / "examples" / "sources.json",
+    ):
+        if candidate.is_file():
+            return candidate.read_text(encoding="utf-8")
+
+    return (
+        resources.files("cookie_http_seeder.resources")
+        .joinpath("sources.json")
+        .read_text(encoding="utf-8")
+    )
 
 
 def load_sources(path: Path | None = None) -> dict[str, dict[str, object]]:
-    sources_path = path or Path(
-        os.environ.get("COOKIE_HTTP_SEEDER_SOURCES", str(DEFAULT_SOURCES_PATH))
-    )
-    raw = json.loads(sources_path.read_text(encoding="utf-8"))
+    if path is not None:
+        raw_text = path.read_text(encoding="utf-8")
+    else:
+        raw_text = _read_default_sources_text()
+    raw = json.loads(raw_text)
     if not isinstance(raw, dict) or not isinstance(raw.get("sources"), dict):
         raise ValueError("sources file must contain a sources object")
     sources: dict[str, dict[str, object]] = {}

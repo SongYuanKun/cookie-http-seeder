@@ -32,7 +32,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--sources",
         type=Path,
         default=None,
-        help="sources JSON (default: examples/sources.json)",
+        help="sources JSON (default: examples/sources.json or packaged defaults)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

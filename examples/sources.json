@@ -1,10 +1,20 @@
 {
   "sources": {
     "fang": {
-      "domains": [".fang.com", "fang.com", ".soufun.com", "soufun.com"]
+      "domains": [
+        ".fang.com",
+        "fang.com",
+        ".soufun.com",
+        "soufun.com"
+      ]
     },
     "beike": {
-      "domains": [".ke.com", "ke.com", ".lianjia.com", "lianjia.com"]
+      "domains": [
+        ".ke.com",
+        "ke.com",
+        ".lianjia.com",
+        "lianjia.com"
+      ]
     }
   }
 }

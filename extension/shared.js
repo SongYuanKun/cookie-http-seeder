@@ -1,4 +1,4 @@
-/** Keep in sync with examples/sources.json */
+/** Keep in sync via: python scripts/sync_extension_sources.py */
 export const SOURCES = {
   beike: {
     label: "beike",
