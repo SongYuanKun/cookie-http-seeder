@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import tempfile
 import threading
 import unittest
 import urllib.error
@@ -11,6 +12,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
+from cookie_http_seeder.paths import atomic_write_text, default_data_dir
 from cookie_http_seeder.receiver import (
     build_handler,
     configure,
@@ -29,19 +31,47 @@ class StoreTests(unittest.TestCase):
         payload = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(payload["updatedAt"], "2026-09-16T00:00:00Z")
 
+    def test_atomic_write_leaves_no_tmp(self) -> None:
+        path = Path(self._testMethodName + ".json")
+        self.addCleanup(lambda: path.unlink(missing_ok=True))
+        atomic_write_text(path, '{"ok":true}\n')
+        self.assertTrue(path.is_file())
+        leftovers = list(path.parent.glob(f".{path.name}.*.tmp"))
+        self.assertEqual(leftovers, [])
+
     def test_load_sources_from_examples(self) -> None:
         sources = load_sources(Path("examples/sources.json"))
         self.assertIn("fang", sources)
         self.assertIn("beike", sources)
+
+    def test_load_sources_from_data_dir_override(self) -> None:
+        data_dir = Path(tempfile.mkdtemp(prefix="chs-data-"))
+        self.addCleanup(lambda: shutil.rmtree(data_dir, ignore_errors=True))
+        (data_dir / "sources.json").write_text(
+            json.dumps({"sources": {"mysite": {"domains": ["example.com"]}}}),
+            encoding="utf-8",
+        )
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("COOKIE_HTTP_SEEDER_SOURCES", None)
+            sources = load_sources(data_dir=data_dir)
+        self.assertEqual(list(sources), ["mysite"])
 
     def test_load_sources_packaged_fallback(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("COOKIE_HTTP_SEEDER_SOURCES", None)
             with mock.patch("cookie_http_seeder.store._REPO_ROOT", Path("/nonexistent")):
                 with mock.patch("cookie_http_seeder.store.Path.cwd", return_value=Path("/tmp")):
-                    sources = load_sources()
+                    with mock.patch(
+                        "cookie_http_seeder.store.sources_override_file",
+                        return_value=Path("/nonexistent/sources.json"),
+                    ):
+                        sources = load_sources()
         self.assertIn("fang", sources)
         self.assertTrue(sources["fang"]["domains"])
+
+    def test_default_data_dir_prefers_env(self) -> None:
+        with mock.patch.dict(os.environ, {"COOKIE_HTTP_SEEDER_DATA": "/tmp/chs-data"}):
+            self.assertEqual(default_data_dir(), Path("/tmp/chs-data"))
 
 
 class ReceiverTests(unittest.TestCase):

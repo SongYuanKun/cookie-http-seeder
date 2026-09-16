@@ -6,6 +6,18 @@ import os
 from pathlib import Path
 
 from .notify import notify_needed
+from .paths import (
+    ENV_NO_NOTIFY,
+    ENV_TOKEN,
+    ENV_WEBHOOK_FILE,
+    ensure_data_dir,
+    env_flag,
+    env_host,
+    env_port,
+    sources_override_file,
+    token_file,
+    webhook_file,
+)
 from .receiver import (
     configure,
     default_token_file,
@@ -26,21 +38,31 @@ def _build_parser() -> argparse.ArgumentParser:
         "--data-dir",
         type=Path,
         default=None,
-        help="cookie + token directory (default: ./data)",
+        help="cookie + token directory (env COOKIE_HTTP_SEEDER_DATA, else ./data or XDG)",
     )
     parser.add_argument(
         "--sources",
         type=Path,
         default=None,
-        help="sources JSON (default: examples/sources.json or packaged defaults)",
+        help="sources JSON (else $data-dir/sources.json, env, examples, or packaged)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("init-token", help="create data/cookie-receiver.token if missing")
+    sub.add_parser("init-token", help="create cookie-receiver.token if missing")
+    sub.add_parser("paths", help="print resolved data paths as JSON")
 
     serve_p = sub.add_parser("serve", help="run the loopback receiver")
-    serve_p.add_argument("--host", default="127.0.0.1")
-    serve_p.add_argument("--port", type=int, default=18765)
+    serve_p.add_argument(
+        "--host",
+        default=None,
+        help="bind address (default: env COOKIE_HTTP_SEEDER_HOST or 127.0.0.1)",
+    )
+    serve_p.add_argument(
+        "--port",
+        type=int,
+        default=None,
+        help="bind port (default: env COOKIE_HTTP_SEEDER_PORT or 18765)",
+    )
     serve_p.add_argument("--token", default="")
     serve_p.add_argument("--token-file", type=Path, default=None)
     serve_p.add_argument(
@@ -60,10 +82,23 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _paths_document(data_dir: Path) -> dict[str, object]:
+    hook = webhook_file(data_dir)
+    override = sources_override_file(data_dir)
+    return {
+        "dataDir": str(data_dir),
+        "tokenFile": str(token_file(data_dir)),
+        "webhookFile": str(hook),
+        "webhookPresent": hook.is_file(),
+        "sourcesOverride": str(override),
+        "sourcesOverridePresent": override.is_file(),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    data_dir = args.data_dir or default_data_dir()
-    sources = load_sources(args.sources)
+    data_dir = ensure_data_dir(args.data_dir or default_data_dir())
+    sources = load_sources(args.sources, data_dir=data_dir)
     configure(sources=sources, data_dir=data_dir)
 
     if args.command == "init-token":
@@ -73,34 +108,40 @@ def main(argv: list[str] | None = None) -> int:
         print(f"token={token}")
         return 0
 
+    if args.command == "paths":
+        print(json.dumps(_paths_document(data_dir), ensure_ascii=False, indent=2))
+        return 0
+
     if args.command == "notify-needed":
         if args.webhook_file is not None:
-            os.environ["COOKIE_HTTP_SEEDER_WEBHOOK_FILE"] = str(args.webhook_file)
+            os.environ[ENV_WEBHOOK_FILE] = str(args.webhook_file)
         status = notify_needed(reason=args.reason, webhook_path=args.webhook_file)
         print(f"notify={status}")
         return 0 if status == "sent" else 1
 
     if args.command == "status":
-        print(json.dumps(status_document(), ensure_ascii=False, indent=2))
+        doc = status_document()
+        doc.update(_paths_document(data_dir))
+        print(json.dumps(doc, ensure_ascii=False, indent=2))
         return 0
 
     if args.command == "serve":
-        token_file = args.token_file or default_token_file(data_dir)
+        token_path = args.token_file or default_token_file(data_dir)
         if args.token:
             token = resolve_token(token=args.token, token_file=None)
-        elif os.environ.get("COOKIE_HTTP_SEEDER_TOKEN"):
+        elif os.environ.get(ENV_TOKEN):
             token = resolve_token(token=None, token_file=None)
         else:
-            token = ensure_token_file(token_file)
-            print(f"token_file={token_file}")
+            token = ensure_token_file(token_path)
+            print(f"token_file={token_path}")
         if args.webhook_file is not None:
-            os.environ["COOKIE_HTTP_SEEDER_WEBHOOK_FILE"] = str(args.webhook_file)
-        serve(
-            host=args.host,
-            port=args.port,
-            token=token,
-            notify=not bool(args.no_notify),
-        )
+            os.environ[ENV_WEBHOOK_FILE] = str(args.webhook_file)
+        no_notify_env = env_flag(ENV_NO_NOTIFY)
+        notify = not bool(args.no_notify) and not bool(no_notify_env)
+        host = args.host or env_host()
+        port = args.port if args.port is not None else env_port()
+        print(json.dumps(_paths_document(data_dir), ensure_ascii=False), flush=True)
+        serve(host=host, port=port, token=token, notify=notify)
         return 0
 
     raise SystemExit(f"unknown command: {args.command}")

@@ -1,0 +1,28 @@
+services:
+  cookie-http-seeder:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: cookie-http-seeder:local
+    container_name: cookie-http-seeder
+    restart: unless-stopped
+    environment:
+      COOKIE_HTTP_SEEDER_DATA: /data
+      COOKIE_HTTP_SEEDER_HOST: 0.0.0.0
+      COOKIE_HTTP_SEEDER_PORT: "18765"
+      # Optional:
+      # COOKIE_HTTP_SEEDER_TOKEN: replace-me-with-long-token
+      # COOKIE_HTTP_SEEDER_NO_NOTIFY: "1"
+      # COOKIE_HTTP_SEEDER_SOURCES: /data/sources.json
+    volumes:
+      # Persist cookies + token; also place sources.json / feishu-webhook here
+      - ../data:/data
+    ports:
+      # Never expose publicly — SSH/Tailscale forward to this loopback port
+      - "127.0.0.1:18765:18765"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18765/healthz', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

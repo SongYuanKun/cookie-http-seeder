@@ -6,21 +6,37 @@ import re
 from importlib import resources
 from pathlib import Path
 
+from .paths import (
+    ENV_SOURCES,
+    atomic_write_text,
+    cookie_file,
+    default_data_dir,
+    sources_override_file,
+)
+
 _PACKAGE_ROOT = Path(__file__).resolve().parent
 _REPO_ROOT = _PACKAGE_ROOT.parent
 _SOURCE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
+# Re-export for existing callers
+__all__ = [
+    "cookie_path_for_source",
+    "default_data_dir",
+    "load_cookie_header",
+    "load_sources",
+    "save_cookie_header",
+]
 
-def default_data_dir() -> Path:
-    """Cookie/token directory: env override, else ``./data`` under the process CWD."""
-    env = os.environ.get("COOKIE_HTTP_SEEDER_DATA", "").strip()
-    return Path(env) if env else Path.cwd() / "data"
 
-
-def _read_default_sources_text() -> str:
-    env = os.environ.get("COOKIE_HTTP_SEEDER_SOURCES", "").strip()
+def _read_default_sources_text(*, data_dir: Path | None = None) -> str:
+    env = os.environ.get(ENV_SOURCES, "").strip()
     if env:
-        return Path(env).read_text(encoding="utf-8")
+        return Path(env).expanduser().read_text(encoding="utf-8")
+
+    # Deploy-friendly: drop sources.json into the data volume
+    override = sources_override_file(data_dir)
+    if override.is_file():
+        return override.read_text(encoding="utf-8")
 
     # Prefer editable/git checkout examples so local edits take effect
     for candidate in (
@@ -37,11 +53,13 @@ def _read_default_sources_text() -> str:
     )
 
 
-def load_sources(path: Path | None = None) -> dict[str, dict[str, object]]:
+def load_sources(
+    path: Path | None = None, *, data_dir: Path | None = None
+) -> dict[str, dict[str, object]]:
     if path is not None:
         raw_text = path.read_text(encoding="utf-8")
     else:
-        raw_text = _read_default_sources_text()
+        raw_text = _read_default_sources_text(data_dir=data_dir)
     raw = json.loads(raw_text)
     if not isinstance(raw, dict) or not isinstance(raw.get("sources"), dict):
         raise ValueError("sources file must contain a sources object")
@@ -65,8 +83,7 @@ def load_sources(path: Path | None = None) -> dict[str, dict[str, object]]:
 def cookie_path_for_source(source: str, *, data_dir: Path | None = None) -> Path:
     if not _SOURCE_NAME.fullmatch(source):
         raise ValueError(f"unsupported cookie source: {source}")
-    root = data_dir or default_data_dir()
-    return root / f"{source}-cookies.json"
+    return cookie_file(source, data_dir=data_dir)
 
 
 def load_cookie_header(
@@ -104,15 +121,12 @@ def save_cookie_header(
         path = path or cookie_path_for_source(source, data_dir=data_dir)
     if path is None:
         raise ValueError("path or source is required")
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload: dict[str, str] = {"cookie_header": cookie_header.strip()}
     if updated_at:
         payload["updatedAt"] = updated_at
-    path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    atomic_write_text(
+        path,
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        mode=0o600,
     )
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
     return path

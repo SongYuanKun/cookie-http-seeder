@@ -1,0 +1,26 @@
+[Unit]
+Description=cookie-http-seeder loopback receiver
+Documentation=https://github.com/SongYuanKun/cookie-http-seeder
+After=network.target
+
+[Service]
+Type=simple
+User=cookie-seeder
+Group=cookie-seeder
+WorkingDirectory=/var/lib/cookie-http-seeder
+Environment=COOKIE_HTTP_SEEDER_DATA=/var/lib/cookie-http-seeder
+Environment=COOKIE_HTTP_SEEDER_HOST=127.0.0.1
+Environment=COOKIE_HTTP_SEEDER_PORT=18765
+# Environment=COOKIE_HTTP_SEEDER_NO_NOTIFY=1
+# Environment=COOKIE_HTTP_SEEDER_SOURCES=/var/lib/cookie-http-seeder/sources.json
+ExecStart=/usr/local/bin/cookie-http-seeder serve
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cookie-http-seeder
+
+[Install]
+WantedBy=multi-user.target

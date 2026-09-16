@@ -17,7 +17,10 @@ python3 -m venv .venv
 | Path | Role |
 |------|------|
 | `cookie_http_seeder/` | Python package (CLI + receiver) |
+| `cookie_http_seeder/paths.py` | Data-dir / env resolution |
 | `cookie_http_seeder/resources/sources.json` | Packaged default sources (shipped in wheels) |
+| `deploy/` | Docker Compose + systemd templates |
+| `docs/deploy.md` | Deployment guide |
 | `examples/` | Editable examples for local/dev use |
 | `extension/` | Chrome MV3 extension |
 | `tests/` | pytest suite |

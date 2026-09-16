@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
 import re
-import urllib.error
 import urllib.request
 from pathlib import Path
 
-from .store import default_data_dir
+from .paths import webhook_file
 
 _HOOK = re.compile(
     r"https://open\.feishu\.cn/open-apis/bot/v2/hook/"
@@ -22,13 +20,13 @@ HUMAN_ACTION = (
 )
 
 
-def resolve_webhook_path(explicit: Path | None = None) -> Path | None:
+def resolve_webhook_path(
+    explicit: Path | None = None, *, data_dir: Path | None = None
+) -> Path | None:
     if explicit is not None:
         return explicit
-    env = os.environ.get("COOKIE_HTTP_SEEDER_WEBHOOK_FILE", "").strip()
-    if env:
-        return Path(env)
-    candidate = default_data_dir() / "feishu-webhook"
+    candidate = webhook_file(data_dir)
+    # env override is already handled inside webhook_file()
     try:
         if candidate.exists():
             return candidate

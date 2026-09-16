@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .notify import notify_pushed
+from .paths import atomic_write_text, ensure_data_dir, token_file, webhook_file
 from .store import (
     cookie_path_for_source,
     default_data_dir,
@@ -40,8 +41,7 @@ def _utc_now() -> str:
 def configure(*, sources: dict[str, dict[str, object]], data_dir: Path) -> None:
     global _ALLOWED_SOURCES, _DATA_DIR
     _ALLOWED_SOURCES = frozenset(sources)
-    _DATA_DIR = data_dir
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+    _DATA_DIR = ensure_data_dir(data_dir)
 
 
 def resolve_token(*, token: str | None, token_file: Path | None) -> str:
@@ -63,19 +63,15 @@ def resolve_token(*, token: str | None, token_file: Path | None) -> str:
 
 
 def default_token_file(data_dir: Path | None = None) -> Path:
-    return (data_dir or default_data_dir()) / "cookie-receiver.token"
+    return token_file(data_dir)
 
 
 def ensure_token_file(path: Path) -> str:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_data_dir(path.parent)
     if path.exists():
         return resolve_token(token=None, token_file=path)
     value = secrets.token_urlsafe(24)
-    path.write_text(value + "\n", encoding="utf-8")
-    try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+    atomic_write_text(path, value + "\n", mode=0o600)
     return value
 
 
@@ -174,7 +170,16 @@ def status_document() -> dict[str, Any]:
         if source in pushes:
             entry["lastPush"] = pushes[source]
         sources[source] = entry
-    return {"ok": True, "sources": sources, "observedAt": _utc_now()}
+    hook = webhook_file(_DATA_DIR)
+    return {
+        "ok": True,
+        "dataDir": str(_DATA_DIR),
+        "tokenFile": str(token_file(_DATA_DIR)),
+        "webhookFile": str(hook),
+        "webhookPresent": hook.is_file(),
+        "sources": sources,
+        "observedAt": _utc_now(),
+    }
 
 
 def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTPRequestHandler]:

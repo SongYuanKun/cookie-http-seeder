@@ -26,7 +26,9 @@ This is intentionally narrow ops glue, not a general session-mirroring platform.
 
 - Chrome MV3 extension with per-source domain allow-list
 - Python receiver bound to loopback by default
-- Writes `{ "cookie_header": "...", "updatedAt": "..." }` files (`0600`)
+- Writes `{ "cookie_header": "...", "updatedAt": "..." }` files (`0600`, atomic replace)
+- Portable data dir (`COOKIE_HTTP_SEEDER_DATA`, `./data`, or XDG)
+- Docker Compose + systemd deploy templates
 - Optional Feishu/Lark webhook notify on successful push
 - SSH / Tailscale port-forward friendly
 - Zero runtime dependencies (stdlib only)
@@ -117,8 +119,44 @@ Minimal template: `examples/sources.minimal.json`.
 }
 ```
 
-Pass a custom file with `--sources /path/to/sources.json`, or set
-`COOKIE_HTTP_SEEDER_SOURCES`.
+Pass a custom file with `--sources /path/to/sources.json`, set
+`COOKIE_HTTP_SEEDER_SOURCES`, or place `sources.json` inside the data directory
+(useful for Docker/systemd volumes).
+
+## Data storage
+
+Cookie files stay on local disk so crawlers can keep doing a simple file read.
+One durable directory holds everything:
+
+```text
+$data/
+  {source}-cookies.json
+  cookie-receiver.token
+  sources.json              # optional override
+  feishu-webhook            # optional
+```
+
+Resolution order: `--data-dir` → `COOKIE_HTTP_SEEDER_DATA` → existing `./data` →
+`$XDG_DATA_HOME/cookie-http-seeder`.
+
+```bash
+cookie-http-seeder paths
+```
+
+## Deployment
+
+| Mode | Entry |
+|------|-------|
+| Docker Compose | `deploy/docker-compose.yml` (publishes `127.0.0.1:18765` only) |
+| systemd | `deploy/systemd/cookie-http-seeder.service` |
+| bare process | `COOKIE_HTTP_SEEDER_DATA=... cookie-http-seeder serve` |
+
+Full guide: [docs/deploy.md](docs/deploy.md).
+
+```bash
+mkdir -p data
+docker compose -f deploy/docker-compose.yml up -d --build
+```
 
 ## Optional Feishu notify
 
@@ -147,6 +185,7 @@ See [SECURITY.md](SECURITY.md) for reporting vulnerabilities.
 
 ```text
 cookie-http-seeder init-token
+cookie-http-seeder paths
 cookie-http-seeder serve [--host 127.0.0.1] [--port 18765]
 cookie-http-seeder notify-needed
 cookie-http-seeder status
@@ -156,16 +195,21 @@ Environment variables:
 
 | Variable | Meaning |
 |----------|---------|
-| `COOKIE_HTTP_SEEDER_DATA` | Data directory (default `./data`) |
+| `COOKIE_HTTP_SEEDER_DATA` | Data directory |
+| `COOKIE_HTTP_SEEDER_HOST` / `_PORT` | Bind address for `serve` |
 | `COOKIE_HTTP_SEEDER_SOURCES` | Path to sources JSON |
-| `COOKIE_HTTP_SEEDER_TOKEN` | Bearer token (alternative to token file) |
+| `COOKIE_HTTP_SEEDER_TOKEN` / `_TOKEN_FILE` | Bearer token |
 | `COOKIE_HTTP_SEEDER_WEBHOOK_FILE` | Feishu webhook file path |
+| `COOKIE_HTTP_SEEDER_NO_NOTIFY` | Disable push notifications (`1`/`true`) |
 
 ## Project layout
 
 ```text
 cookie_http_seeder/     # Python package
+  paths.py              # data-dir / env resolution
   resources/            # Packaged default sources.json
+deploy/                 # Docker Compose + systemd templates
+docs/deploy.md          # Deployment guide
 extension/              # Chrome MV3 extension
 examples/               # Sample sources + consumer snippet
 scripts/                # Maintainer helpers (sources sync)

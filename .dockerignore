@@ -1,0 +1,17 @@
+.venv/
+.git/
+.github/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+*.egg-info/
+dist/
+build/
+data/*
+!data/.gitkeep
+extension/
+tests/
+docs/
+deploy/
+*.md
+!README.md
