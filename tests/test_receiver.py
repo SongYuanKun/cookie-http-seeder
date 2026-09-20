@@ -18,6 +18,10 @@ from cookie_http_seeder.receiver import (
     configure,
     cookies_to_header,
     ensure_token_file,
+    format_listen_url,
+    http_server_class_for_host,
+    is_ipv6_literal,
+    normalize_bind_host,
 )
 from cookie_http_seeder.store import load_cookie_header, load_sources, save_cookie_header
 
@@ -133,6 +137,20 @@ class ReceiverTests(unittest.TestCase):
         first = ensure_token_file(path)
         second = ensure_token_file(path)
         self.assertEqual(first, second)
+
+    def test_ipv6_bind_helpers(self) -> None:
+        self.assertEqual(normalize_bind_host("[::1]"), "::1")
+        self.assertTrue(is_ipv6_literal("fd7a:115c:a1e0::dc34:822e"))
+        self.assertFalse(is_ipv6_literal("127.0.0.1"))
+        self.assertEqual(
+            format_listen_url("fd7a:115c:a1e0::dc34:822e", 18765),
+            "http://[fd7a:115c:a1e0::dc34:822e]:18765",
+        )
+        self.assertIs(http_server_class_for_host("127.0.0.1"), ThreadingHTTPServer)
+        self.assertEqual(
+            http_server_class_for_host("::1").address_family,
+            __import__("socket").AF_INET6,
+        )
 
 
 if __name__ == "__main__":

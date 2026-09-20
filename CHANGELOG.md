@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- IPv6 bind support with Tailscale-friendly bind retry
 - Portable data directory resolution (`COOKIE_HTTP_SEEDER_DATA`, `./data`, or XDG)
 - Atomic cookie file writes; `cookie-http-seeder paths` command
 - Auto-load `$data/sources.json` for per-host deploy overrides
