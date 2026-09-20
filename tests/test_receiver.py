@@ -27,6 +27,10 @@ from cookie_http_seeder.receiver import (
     build_handler,
     configure,
     ensure_token_file,
+    format_listen_url,
+    http_server_class_for_host,
+    is_ipv6_literal,
+    normalize_bind_host,
 )
 from cookie_http_seeder.store import (
     load_cookie_header,
@@ -258,6 +262,20 @@ def push_body(request, **updates):
             "source": "site", "cookies": [cookie()],
             "expected_version": request("GET", "/v2/sync/site")[1]["snapshot_version"],
             "request_id": str(uuid.uuid4()), **updates}
+
+    def test_ipv6_bind_helpers(self) -> None:
+        self.assertEqual(normalize_bind_host("[::1]"), "::1")
+        self.assertTrue(is_ipv6_literal("fd7a:115c:a1e0::dc34:822e"))
+        self.assertFalse(is_ipv6_literal("127.0.0.1"))
+        self.assertEqual(
+            format_listen_url("fd7a:115c:a1e0::dc34:822e", 18765),
+            "http://[fd7a:115c:a1e0::dc34:822e]:18765",
+        )
+        self.assertIs(http_server_class_for_host("127.0.0.1"), ThreadingHTTPServer)
+        self.assertEqual(
+            http_server_class_for_host("::1").address_family,
+            __import__("socket").AF_INET6,
+        )
 
 
 def test_http_auth_and_push(receiver):
