@@ -2,6 +2,7 @@ import {
   approveSources, configExport, configImport, endpointURL, fetchSources, loadSettings,
   normalizeSources, receiverRequest, saveSettings, sourceOrigins,
 } from "./shared.js";
+import { displayTimes, localTimeZone } from "./time.js";
 const $ = id => document.getElementById(id);
 let doc = null, connection = null, imported = null, busy = false;
 const show = (text, error = false) => { $("status").textContent = text; $("status").className = error ? "error" : "ok"; };
@@ -142,8 +143,9 @@ $("diagnose").addEventListener("click", action(async () => {
     permissions[name] = await chrome.permissions.contains({ origins: sourceOrigins(spec) });
   }
   // Do not include the settings object: it contains the receiver token.
-  $("diagnostics").textContent = JSON.stringify({
-    connection: remote.ok ? "authenticated" : remote.code,
-    permissions, queue: queue?.queue?.jobs || {}, sources: remote.sources || {},
-  }, null, 2);
+  $("diagnostics").textContent = `当地时间（${localTimeZone()}，YYYY-MM-DD HH:mm:ss）\n` +
+    JSON.stringify(displayTimes({
+      connection: remote.ok ? "authenticated" : remote.code,
+      permissions, queue: queue?.queue?.jobs || {}, sources: remote.sources || {},
+    }), null, 2);
 }));

@@ -28,6 +28,7 @@ from .receiver import (
     status_document,
 )
 from .store import default_data_dir, load_cookie_header, load_sources
+from .time_display import display_times
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -68,6 +69,10 @@ def _build_parser() -> argparse.ArgumentParser:
     report.add_argument("--reason-code", required=True)
     report.add_argument("--endpoint", default="http://127.0.0.1:18765")
     report.add_argument("--token-file", type=Path, default=None)
+    for command in (status, doctor, report):
+        command.add_argument("--json", dest="raw_json", action="store_true",
+                             help="machine-readable JSON with original UTC timestamps; "
+                                  "default display uses local YYYY-MM-DD HH:mm:ss")
     return parser
 
 
@@ -85,7 +90,8 @@ def main(argv: list[str] | None = None) -> int:
         from .diagnostics import diagnose
         doc = diagnose(data_dir, endpoint=args.endpoint, sources_path=args.sources,
                        token_path=args.token_file, local_only=args.local_only)
-        print(json.dumps(doc, ensure_ascii=False, indent=2))
+        print(json.dumps(doc if args.raw_json else display_times(doc),
+                         ensure_ascii=False, indent=2))
         return 0 if doc["ok"] else 1
     if args.command == "report":
         from .client import ClientError, ReceiverClient
@@ -98,7 +104,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps({"ok": False,
                               "error": "report_failed_check_connection_version_and_reason"}))
             return 1
-        print(json.dumps(result, indent=2))
+        print(json.dumps(result if args.raw_json else display_times(result),
+                         ensure_ascii=False, indent=2))
         return 0
     data_dir = ensure_data_dir(data_dir)
     sources = load_sources(args.sources, data_dir=data_dir)
@@ -119,7 +126,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"notify={status}")
         return 0 if status == "sent" else 1
     if args.command == "status":
-        print(json.dumps({**status_document(), **_paths_document(data_dir)}, indent=2))
+        doc = {**status_document(), **_paths_document(data_dir)}
+        print(json.dumps(doc if args.raw_json else display_times(doc),
+                         ensure_ascii=False, indent=2))
         return 0
     if args.command == "header":
         header = load_cookie_header(source=args.source, data_dir=data_dir, url=args.url)

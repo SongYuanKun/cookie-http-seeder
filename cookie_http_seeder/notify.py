@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import re
 import urllib.request
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .paths import webhook_file
+from .time_display import format_local_time
 
 _HOOK = re.compile(
     r"https://open\.feishu\.cn/open-apis/bot/v2/hook/"
@@ -71,6 +73,7 @@ def notify_pushed(*, sources: list[str], webhook_path: Path | None = None) -> st
         webhook = _read_webhook(path)
         text = (
             "【cookie-http-seeder】cookies updated\n"
+            f"time: {format_local_time(datetime.now(UTC))} (receiver local time)\n"
             f"sources: {','.join(sources)}\n"
             "Next crawl can reuse the new cookie_header files."
         )
@@ -88,6 +91,7 @@ def notify_needed(*, reason: str, webhook_path: Path | None = None) -> str:
         webhook = _read_webhook(path)
         text = (
             "【cookie-http-seeder】cookies need refresh\n"
+            f"time: {format_local_time(datetime.now(UTC))} (receiver local time)\n"
             f"reason: {reason[:240]}\n"
             f"action: {HUMAN_ACTION}"
         )
