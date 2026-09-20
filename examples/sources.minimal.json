@@ -1,7 +1,12 @@
 {
+  "schema_version": 1,
   "sources": {
     "mysite": {
-      "domains": [".example.com", "example.com"]
+      "domains": [
+        "example.com"
+      ],
+      "target_url": "https://example.com/account",
+      "enabled": true
     }
   }
 }
