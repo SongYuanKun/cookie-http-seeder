@@ -1,80 +1,33 @@
-import { loadSettings, saveSettings } from "./shared.js";
+import { formatLocalTime, localTimeZone } from "./time.js";
 
-const endpointEl = document.getElementById("endpoint");
-const tokenEl = document.getElementById("token");
-const autoEl = document.getElementById("autoPushMinutes");
-const statusEl = document.getElementById("status");
-const saveBtn = document.getElementById("save");
-const pushBtn = document.getElementById("push");
-
-function setStatus(text, kind = "") {
-  statusEl.textContent = text;
-  statusEl.className = kind;
+const status = document.getElementById("status");
+const labels = { pending: "等待同步", syncing: "正在同步", retrying: "等待重试", succeeded: "已同步",
+  blocked: "需要处理", exhausted: "重试已耗尽", paused: "已暂停" };
+async function refresh() {
+  const response = await chrome.runtime.sendMessage({ type: "sync-status" });
+  if (!response?.ok) throw new Error("无法读取同步队列");
+  const jobs = response.queue?.jobs || {};
+  status.textContent = Object.entries(jobs).map(([source, job]) => {
+    const retry = job.nextAt != null ? `\n  计划重试：${formatLocalTime(job.nextAt)}` : "";
+    const success = job.lastSuccessAt != null ? `\n  上次成功：${formatLocalTime(job.lastSuccessAt)}` : "";
+    return `${source}: ${labels[job.phase] || job.phase} (${job.attempts}/5)${retry}${success}` +
+      (job.errorCode ? `\n  ${job.errorCode}` : "");
+  }).join("\n") || "没有待处理任务。请先管理网站并授权。";
+  if (Object.keys(jobs).length) status.textContent += `\n时间按 ${localTimeZone()} 显示`;
+  status.className = Object.values(jobs).some(j => ["blocked", "exhausted"].includes(j.phase)) ? "error" : "ok";
 }
-
-async function refreshForm() {
-  const settings = await loadSettings();
-  endpointEl.value = settings.endpoint || "";
-  tokenEl.value = settings.token || "";
-  autoEl.value = String(settings.autoPushMinutes ?? 0);
-  const stored = await chrome.storage.local.get(["lastPushAt", "lastPushResults"]);
-  if (stored.lastPushAt) {
-    const lines = [`Last push: ${stored.lastPushAt}`];
-    const results = stored.lastPushResults || {};
-    for (const [source, result] of Object.entries(results)) {
-      lines.push(
-        result.ok
-          ? `✓ ${source} (${result.cookieCount || "?"} cookies)`
-          : `✗ ${source}: ${result.error}`,
-      );
-    }
-    setStatus(
-      lines.join("\n"),
-      Object.values(results).every((item) => item.ok) ? "ok" : "error",
-    );
-  }
-}
-
-saveBtn.addEventListener("click", async () => {
-  const autoPushMinutes = Math.max(0, Number(autoEl.value) || 0);
-  await saveSettings({
-    endpoint: endpointEl.value.trim(),
-    token: tokenEl.value.trim(),
-    autoPushMinutes,
-  });
-  const response = await chrome.runtime.sendMessage({ type: "settings-saved" });
-  setStatus(response?.ok ? "Saved" : response?.error || "Save failed", response?.ok ? "ok" : "error");
-});
-
-pushBtn.addEventListener("click", async () => {
-  pushBtn.disabled = true;
-  setStatus("Pushing…");
+document.getElementById("manage").addEventListener("click", () => chrome.runtime.openOptionsPage());
+document.getElementById("refresh").addEventListener("click", () => refresh().catch(() => { status.textContent = "读取失败"; }));
+document.getElementById("push").addEventListener("click", async event => {
+  event.target.disabled = true; status.textContent = "正在同步；临时故障会排队重试…";
   try {
-    await saveSettings({
-      endpoint: endpointEl.value.trim(),
-      token: tokenEl.value.trim(),
-      autoPushMinutes: Math.max(0, Number(autoEl.value) || 0),
-    });
     const response = await chrome.runtime.sendMessage({ type: "push-now" });
-    if (!response?.ok) {
-      setStatus(response?.error || "Push failed", "error");
-      return;
-    }
-    const lines = [];
-    for (const [source, result] of Object.entries(response.results || {})) {
-      lines.push(
-        result.ok
-          ? `✓ ${source} @ ${result.updatedAt || "?"}`
-          : `✗ ${source}: ${result.error}`,
-      );
-    }
-    const allOk = Object.values(response.results || {}).every((item) => item.ok);
-    setStatus(lines.join("\n") || "No result", allOk ? "ok" : "error");
-  } catch (error) {
-    setStatus(String(error?.message || error), "error");
-  } finally {
-    pushBtn.disabled = false;
-  }
+    if (!response?.ok) throw new Error(response?.error || "推送失败");
+    await refresh();
+  } catch (error) { status.textContent = error.message; status.className = "error"; }
+  finally { event.target.disabled = false; }
 });
-
-refreshForm();
+chrome.storage.onChanged.addListener((_changes, area) => {
+  if (area === "local") refresh().catch(() => {});
+});
+refresh().catch(() => { status.textContent = "无法读取扩展状态"; });

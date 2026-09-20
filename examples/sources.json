@@ -1,20 +1,23 @@
 {
+  "schema_version": 1,
   "sources": {
-    "fang": {
-      "domains": [
-        ".fang.com",
-        "fang.com",
-        ".soufun.com",
-        "soufun.com"
-      ]
-    },
     "beike": {
+      "label": "贝壳 / 链家",
       "domains": [
-        ".ke.com",
         "ke.com",
-        ".lianjia.com",
         "lianjia.com"
-      ]
+      ],
+      "target_url": "https://www.ke.com/",
+      "enabled": true
+    },
+    "fang": {
+      "label": "房天下",
+      "domains": [
+        "fang.com",
+        "soufun.com"
+      ],
+      "target_url": "https://www.fang.com/",
+      "enabled": true
     }
   }
 }

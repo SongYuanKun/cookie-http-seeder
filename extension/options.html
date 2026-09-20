@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cookie HTTP Seeder · 网站管理</title>
+<style>
+body{font:15px/1.6 system-ui,sans-serif;color:#182635;background:#f3f6f8;margin:0}
+main{max-width:1040px;margin:36px auto;padding:0 24px}h1{margin-bottom:0}h2{font-size:20px}
+section{background:white;border:1px solid #dce3e9;border-radius:10px;padding:22px;margin:20px 0}
+label{display:block;margin:12px 0}input:not([type=checkbox]),textarea{display:block;box-sizing:border-box;width:100%;padding:9px;border:1px solid #a7b5c4;border-radius:5px;font:inherit}
+button{padding:8px 12px;margin:4px 6px 4px 0;cursor:pointer;border:1px solid #95a6b7;border-radius:5px;background:#f5f8fb;font:inherit}
+button:disabled{opacity:.5;cursor:wait}button.primary{background:#175b88;color:white;border-color:#175b88}
+small,.hint{color:#536575}table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:10px 8px;text-align:left;border-bottom:1px solid #dce3e9;vertical-align:top;overflow-wrap:anywhere}
+.scroll{overflow:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:#a42323}.ok{color:#17643f}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}@media(max-width:700px){.two{display:block}}
+</style></head><body><main>
+<h1>Cookie HTTP Seeder</h1>
+<p class="hint">只同步明确授权的非分区 Cookie；不读取 localStorage，不自动登录，登录有效性由爬虫反馈，不主动请求目标网站。</p>
+<section><h2>1. 连接接收端</h2>
+<form id="connection-form">
+<label>接收端地址<input id="endpoint" required value="http://127.0.0.1:18765" autocomplete="off"></label>
+<div class="two"><label>Token<input id="token" type="password" required autocomplete="off"></label>
+<label>定时推送（分钟；0 关闭，启用至少 15）<input id="autoPushMinutes" type="number" min="0" max="10080" step="1" value="0" required></label></div>
+<label><input id="syncOnChange" type="checkbox"> Cookie 变化后自动同步（默认关闭，约 30 秒合并窗口）</label>
+<button class="primary" type="submit">保存连接并加载配置</button><button id="reload" type="button">重新加载配置</button>
+</form><small>远程必须 HTTPS；HTTP 仅限 localhost / 127.0.0.1，可通过 SSH 转发。更换地址或 Token 后需重新授权来源。</small></section>
+<pre id="status" role="status" aria-live="polite">请配置连接。</pre>
+<section><h2>2. 管理来源</h2>
+<p class="hint">配置来自接收端，但不会自动获得浏览器权限。授权后才会读取对应域名。修改或删除来源会清空它的旧快照。</p>
+<button id="approve" type="button">授权当前显示的配置</button><button id="push-all" type="button">立即推送全部已启用来源</button>
+<div class="scroll"><table><thead><tr><th>来源</th><th>域名 / 固定输出目标 URL</th><th>状态</th><th>操作</th></tr></thead><tbody id="sources"></tbody></table></div>
+<form id="source-form"><div class="two">
+<label>来源标识<input id="source-name" required pattern="[a-z][a-z0-9_-]{0,31}" placeholder="mysite"></label>
+<label>显示名称<input id="source-label" required maxlength="80" placeholder="我的网站"></label></div>
+<label>允许读取的域名（逗号或换行分隔，不填通配符）<textarea id="source-domains" required rows="2" placeholder="example.com"></textarea></label>
+<small>包含这些域名及子域名。需要父域 Cookie 时显式加入父域；不要加入公共后缀。国际化域名使用 punycode。</small>
+<label>固定输出目标 URL<input id="source-url" required type="url" placeholder="https://example.com/account"></label>
+<label><input id="source-enabled" type="checkbox" checked> 启用同步</label>
+<button class="primary" type="submit">保存并授权此来源</button><button type="reset">取消编辑 / 新建</button></form></section>
+<section><h2>3. 同步状态与诊断</h2>
+<p class="hint">传输状态、数据新鲜度、爬虫反馈分别展示。最多尝试 5 次；鉴权/授权错误需手动修复后再推送。队列不保存 Cookie。</p>
+<button id="diagnose" type="button">检查连接和同步状态</button><pre id="diagnostics" role="status"></pre></section>
+<section><h2>4. 配置导入 / 导出</h2>
+<p class="hint">只包含网站配置，不包含接收端地址、Token 或 Cookie。导入为全量替换，会清空被删除或修改来源的旧快照。目标 URL 请勿包含秘密。</p>
+<button id="export" type="button">导出网站配置</button><label>选择配置文件<input id="import-file" type="file" accept=".json,application/json"></label>
+<pre id="import-preview"></pre><button id="apply-import" type="button" disabled>确认替换并授权导入配置</button></section>
+</main><script type="module" src="options.js"></script></body></html>

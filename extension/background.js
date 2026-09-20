@@ -1,106 +1,66 @@
-import {
-  SOURCES,
-  collectSourceCookies,
-  cookiesToHeader,
-  loadSettings,
-  pushCookieHeader,
-} from "./shared.js";
-
-const ALARM_NAME = "cookie-http-seeder-auto-push";
-
-async function pushAll() {
-  const settings = await loadSettings();
-  if (!settings.token?.trim()) throw new Error("token is not configured");
-  if (!settings.endpoint?.trim()) throw new Error("endpoint is not configured");
-
-  const results = {};
-  for (const source of Object.keys(SOURCES)) {
-    const cookies = await collectSourceCookies(source);
-    const cookieHeader = cookiesToHeader(cookies);
-    if (!cookieHeader) {
-      results[source] = { ok: false, error: "no cookies (log in first)" };
-      continue;
-    }
-    try {
-      const body = await pushCookieHeader({
-        endpoint: settings.endpoint.trim(),
-        token: settings.token.trim(),
-        source,
-        cookieHeader,
-      });
-      results[source] = {
-        ok: true,
-        updatedAt: body.updatedAt,
-        cookieCount: cookies.length,
-      };
-    } catch (error) {
-      results[source] = { ok: false, error: String(error?.message || error) };
-    }
-  }
-
-  await chrome.storage.local.set({
-    lastPushAt: new Date().toISOString(),
-    lastPushResults: results,
-  });
-
-  const failed = Object.entries(results).filter(([, value]) => !value.ok);
-  if (failed.length) {
-    await notify(
-      "Cookie push partially failed",
-      failed.map(([name, value]) => `${name}: ${value.error}`).join("; "),
-    );
-  } else {
-    await notify("Cookies pushed", Object.keys(SOURCES).join(", "));
-  }
-  return results;
-}
-
-async function notify(title, message) {
-  try {
-    await chrome.notifications.create({
-      type: "basic",
-      iconUrl: "icons/icon128.png",
-      title,
-      message: message.slice(0, 250),
-    });
-  } catch {
-    // ignore
-  }
-}
+import { loadSettings } from "./shared.js";
+import { RETRY_ALARM, SyncEngine } from "./sync.js";
+const AUTO_ALARM = "cookie-http-seeder-auto-push";
+const engine = new SyncEngine();
 
 async function syncAlarm() {
   const settings = await loadSettings();
-  await chrome.alarms.clear(ALARM_NAME);
-  const minutes = Number(settings.autoPushMinutes) || 0;
-  if (minutes >= 15) {
-    await chrome.alarms.create(ALARM_NAME, { periodInMinutes: minutes });
-  }
+  const minutes = Number(settings.autoPushMinutes);
+  const current = await chrome.alarms.get(AUTO_ALARM);
+  if (Number.isInteger(minutes) && minutes >= 15 && minutes <= 10080) {
+    if (!current || current.periodInMinutes !== minutes) {
+      await chrome.alarms.create(AUTO_ALARM, { periodInMinutes: minutes });
+    }
+  } else { await chrome.alarms.clear(AUTO_ALARM); }
 }
-
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === "push-now") {
-    pushAll()
-      .then((results) => sendResponse({ ok: true, results }))
-      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
-    return true;
-  }
-  if (message?.type === "settings-saved") {
-    syncAlarm()
-      .then(() => sendResponse({ ok: true }))
-      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
-    return true;
-  }
-  return false;
+async function badge() {
+  const queue = await engine.status();
+  const failures = Object.values(queue.jobs).filter(j => ["blocked", "exhausted"].includes(j.phase)).length;
+  await chrome.action.setBadgeText({ text: failures ? String(failures) : "" });
+}
+async function publish(result, manual = false) {
+  await badge();
+  const values = Object.values(result.results || {});
+  const failed = values.filter(r => !r.ok && !r.queued).length;
+  const changed = values.filter(r => r.ok && !r.unchanged).length;
+  if (!failed && !(manual && changed)) return;
+  try {
+    const now = Date.now();
+    const saved = await chrome.storage.local.get(["lastAttentionNotificationAt"]);
+    if (failed && !manual && now - (saved.lastAttentionNotificationAt || 0) < 600_000) return;
+    if (failed) await chrome.storage.local.set({ lastAttentionNotificationAt: now });
+    await chrome.notifications.create({
+      type: "basic", iconUrl: "icons/icon128.png",
+      title: failed ? "Cookie sync needs attention" : "Cookie snapshots updated",
+      message: failed ? "Open diagnostics, fix the cause, then retry manually." :
+        "Transfer completed. This does not verify login validity.",
+    });
+  } catch { /* Notification availability must not affect sync. */ }
+}
+async function handle(message) {
+  if (message.type === "settings-saved") { await syncAlarm(); await engine.recover(); return { ok: true }; }
+  if (message.type === "sync-status") return { ok: true, queue: await engine.status() };
+  await engine.enqueue(message.source ? [message.source] : null, "manual");
+  const result = await engine.runDue(); await publish(result, true); return result;
+}
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id || !["push-now", "settings-saved", "sync-status"].includes(message?.type)) return false;
+  handle(message).then(sendResponse).catch(() => sendResponse({ ok: false, error: "Operation failed; open diagnostics" }));
+  return true;
 });
-
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === ALARM_NAME) pushAll().catch(() => {});
+chrome.cookies.onChanged.addListener(info => { engine.changed(info).catch(() => {}); });
+chrome.alarms.onAlarm.addListener(alarm => {
+  (async () => {
+    if (alarm.name === AUTO_ALARM) await engine.enqueue(null, "periodic");
+    else if (alarm.name !== RETRY_ALARM) return;
+    const result = await engine.runDue(); await publish(result);
+  })().catch(() => {});
 });
-
-chrome.runtime.onInstalled.addListener(() => {
-  syncAlarm().catch(() => {});
-});
-
-chrome.runtime.onStartup.addListener(() => {
-  syncAlarm().catch(() => {});
-});
+async function startup() {
+  await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
+  await engine.recover(); await syncAlarm(); await badge();
+}
+chrome.runtime.onInstalled.addListener(() => { startup().catch(() => {}); });
+chrome.runtime.onStartup.addListener(() => { startup().catch(() => {}); });
+// Recreate important alarms on EVERY worker evaluation, not just browser startup.
+startup().catch(() => {});
