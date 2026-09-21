@@ -1,3 +1,9 @@
+> 本文描述 0.3 的可靠同步基础，当前应同时阅读 [发送端标签](sender-tags.md)。
+> 下文默认示例未带标签时进入 default；非默认标签的请求增加 `X-Sender-Tag`，
+> CLI 增加 `--sender-tag`，Python 读取与反馈使用同一 `sender_tag`。
+> 标签不属于反馈 JSON 字段；配置、版本与状态都在所选标签内维护。
+> 当前快速开始见 [README](../README.md)，当地时间与原始输出见 [时间显示](time-display.md)。
+
 # 第二阶段：可靠同步、状态诊断、失效反馈（0.3.0）
 
 ## 范围
@@ -51,7 +57,8 @@
 相同内容保留快照版本、Cookie 文件和已有验证记录，仅更新小型操作元数据中的最后接收时间。
 快照文件与操作元数据分别原子写入，不是多文件事务。元数据写入失败可能发生在快照已接受之后；版本检查和幂等处理允许安全恢复。
 
-**一个数据目录只能有一个接收进程。** 文件级版本协议不提供跨进程事务锁；多个客户端也不构成自动的账号/设备合并策略。
+**一个根数据目录及其全部标签只能有一个接收进程。** 后续完整性补全已加入 `.receiver.lock` 本地单实例保护，
+见 [完整性说明](completeness-review.md)。CAS 和文件锁都不是分布式事务，不提供同标签多账号合并。
 
 ## 状态与反馈
 
@@ -112,7 +119,8 @@ cookie-http-seeder --data-dir ./data doctor --endpoint https://receiver.example.
 
 自动测试覆盖 Python 单元/本地 HTTP 和 Chrome API mock，不代表真实 Chrome 联调完成。
 不支持分区 Cookie、多个 Cookie store 混合或多 profile；不模拟浏览器 SameSite 发送上下文，也不承诺所有网站跨环境会话通用。
-Ruff 和真实浏览器验证的实际运行情况见交付包 TEST_REPORT.md，不把未运行检查标为通过。
+测试状态以对应提交的 GitHub Actions 结果和单独的实机验收记录为准，不能把未运行检查标为通过。
+历史交付包的 TEST_REPORT.md 只记录当时的本地验证，不代表后续提交的完整测试结果。
 
 参考（Chrome 官方文档，核对于 2026-09-19）：
 - https://developer.chrome.com/docs/extensions/reference/api/alarms

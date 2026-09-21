@@ -1,29 +1,57 @@
-# Security Policy
+# 安全说明
 
-## Supported versions
+## 当前实现与兼容范围
 
-| Version | Supported |
-|---------|-----------|
-| 0.1.x   | yes       |
+当前主干代码元数据为 `0.3.0`。后续可靠性和发送端标签变更仍需按具体提交及能力字段判断；
+本文不声明额外维护分支、长期支持期或新的发行版本。
+0.1 原始 Header 文件和 default 路径有读取兼容，但旧网络上传接口已停用；
+0.2 上传缺少条件写入字段，必须和接收端一起升级。
+迁移见 [README](README.md) 和 [发送端标签说明](docs/sender-tags.md)。
 
-## Reporting a vulnerability
+## 报告漏洞
 
-Please **do not** open a public GitHub issue for security problems.
+不要在公开 GitHub issue 中发布安全问题或真实会话数据。
+可通过 [维护者公开联系方式](https://github.com/SongYuanKun)，或在仓库启用时使用
+[私密安全报告](https://github.com/SongYuanKun/cookie-http-seeder/security/advisories/new)。
+请提供受影响提交、预期与实际行为、影响范围，以及不含真实 Cookie/Token/webhook 的最小复现。
 
-Email the maintainer via the contact listed on the
-[GitHub profile](https://github.com/SongYuanKun), or open a private
-[GitHub security advisory](https://github.com/SongYuanKun/cookie-http-seeder/security/advisories/new)
-if available.
+## Token 与标签不是一回事
 
-Include:
+接收端仍只接受一个配置好的 Bearer Token。所有标签共用它，错误 Token 不会因标签有效而通过。
+持有 Token 的客户端可选择其他标签并修改其来源配置、写入、清空或报告状态。
+**发送端标签仅隔离存储，不提供多租户授权、标签所有权、设备身份或每设备独立 Token。**
+不要将共享 Token 交给彼此不信任的人。强隔离需要独立接收服务和独立数据根目录，
+或以后另行实现权限机制；随机标签名不能代替授权。
 
-- Affected version / commit
-- Impact (token leak, cookie overwrite, SSRF, etc.)
-- Minimal reproduction **without** real session cookies
+## 浏览器与传输
 
-## Design expectations
+只读取用户明确授权域名的 Cookie，不扩大为整个浏览器 Cookie 集。
+服务端配置和本机同意记录相互独立；更改连接、Token 或标签后需要重新授权。
+撤销本机授权不会删除远端副本，已发出的请求也不能撤回；清空远端应使用“清空并暂停”。
 
-- Receiver should bind to loopback (`127.0.0.1` / `::1`) by default
-- Bearer tokens and cookie files are credentials (`0600`)
-- Domain allow-lists are intentional; do not widen to “all cookies”
-- Webhook files must be mode `0600` and validated before use
+默认使用回环端口，跨主机推荐 SSH 本地转发。远程直连必须经可信 HTTPS 反向代理，
+保留 `Authorization` 和 `X-Sender-Tag`，不要记录或缓存认证头/请求体。
+接收端自身不终止 TLS，不应直接暴露明文端口到不可信网络。
+浏览器/客户端应禁止凭据随重定向发送；Origin 校验是补充措施，不是认证身份。
+
+## 文件与运行保护
+
+保护整个根数据目录，包括 `senders/`、Token、webhook、快照、元数据和备份。
+POSIX 目录使用 0700、凭据文件使用 0600；Windows 另需按服务账号限制 ACL。
+标签目录禁止路径穿越、非法/保留名称和符号链接指向其他位置，但不能替代本地目录访问控制。
+
+一个根目录只能运行一个遵守 `.receiver.lock` 的接收进程。锁不是分布式锁，
+不能保护手工改文件、旧版进程或直接调用底层写入函数；升级前停止旧服务。
+不要运行中删除/替换锁文件，不支持 NFS/SMB 多节点写入。
+原子替换保证单文件完整，不是跨快照、配置和元数据的数据库事务。
+
+消费者按实际 URL 筛选 Cookie，不能把固定输出的 Header 发给任意地址。
+不打印 Cookie、Token 或反馈响应正文；标签、显示名称、目标 URL 也不应携带秘密。
+配置导出不含凭据，导出内容仍应由用户检查。
+
+## 明确边界
+
+不自动登录、不处理验证码、不读取 localStorage/sessionStorage，不绕过站点权限。
+不支持分区 Cookie、跨 store/profile 自动合并、完整 SameSite 浏览器上下文或公共后缀数据库。
+传输成功、新鲜度和爬虫验证反馈分别展示；`valid` 不保证会话一直有效。
+真实 Chrome、Windows/macOS 和部署验收不能由 Linux mock/单元测试替代。
