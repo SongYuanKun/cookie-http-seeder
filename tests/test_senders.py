@@ -151,7 +151,9 @@ def http_receiver(tmp_path):
         thread.join(3)
 
 
-def request(port, path, tag=None, method="GET", body=None, token=TOKEN, duplicates=False, extra=None):
+def request(
+    port, path, tag=None, method="GET", body=None, token=TOKEN, duplicates=False, extra=None,
+):
     connection = HTTPConnection("127.0.0.1", port, timeout=4)
     encoded = json.dumps(body).encode() if body is not None else b""
     connection.putrequest(method, path)
