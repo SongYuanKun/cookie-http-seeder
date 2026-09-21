@@ -5,6 +5,7 @@
 
 ## 配置与使用
 
+当前版本元数据仍为 0.3.0，是否支持本功能必须检查 `sender_tags` 能力和标签回显。
 接收端和扩展一起更新。在扩展“管理网站与连接”中填写发送端标签，
 例如 `home-pc`、`work-pc`。保存连接后重新授权来源，再推送。
 标签使用 1–32 位小写字母、数字、横线或下划线，首位为字母或数字；
@@ -77,6 +78,8 @@ cookie-http-seeder --data-dir ./data report beike --sender-tag home-pc \
   --snapshot-version <实际使用的版本> --result invalid --reason-code session_expired
 ```
 
+`--sender-tag` 只用于 status/doctor/report/header 等按标签选择的子命令；
+serve、init-token、paths 和 notify-needed 不接受它。不要创建臆造的标签环境变量。
 `status`/`doctor`/`report` 的当地时间显示和 `--json` 原始时间输出规则不变。
 `header <source> --url <url> --sender-tag <tag>` 可用于本地脚本，但会打印敏感 Header。
 
@@ -94,4 +97,5 @@ cookie-http-seeder --data-dir ./data report beike --sender-tag home-pc \
 第一版也不做标签改名、跨标签合并、自动选择“最新发送端”或默认回退。
 
 本改动包含此前完整性补丁中的启动修复、单进程目录锁、来源状态和本机授权撤销。
-基线是 main `ddfe74de35505ec83af62530cc75789d373b4dbd`；不直接修改主干。
+最初开发基线是 `ddfe74d`，已通过 PR #2 合并到 main（合并提交 `171eae6`）。
+当前快速开始与部署请见 [README](../README.md) 和 [部署指南](deploy.md)。
