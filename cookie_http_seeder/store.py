@@ -16,6 +16,7 @@ from .paths import (
     default_data_dir,
     sources_override_file,
 )
+from .senders import sender_directory
 
 _PACKAGE_ROOT = Path(__file__).resolve().parent
 _REPO_ROOT = _PACKAGE_ROOT.parent
@@ -57,7 +58,9 @@ def cookie_path_for_source(source: str, *, data_dir: Path | None = None) -> Path
     return cookie_file(source, data_dir=data_dir)
 
 
-def read_snapshot(source: str, *, data_dir: Path | None = None) -> Any:
+def read_snapshot(source: str, *, data_dir: Path | None = None,
+                  sender_tag: str = "default") -> Any:
+    data_dir = sender_directory(data_dir or default_data_dir(), sender_tag)
     path = cookie_path_for_source(source, data_dir=data_dir)
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
@@ -88,8 +91,11 @@ def save_snapshot(
 
 def load_cookie_header(
     path: Path | None = None, *, source: str | None = None, data_dir: Path | None = None,
-    url: str | None = None,
+    url: str | None = None, sender_tag: str = "default",
 ) -> str | None:
+    data_dir = sender_directory(data_dir or default_data_dir(), sender_tag)
+    if sender_tag != "default" and (path is not None or source is None):
+        raise ValueError("select a sender using source and data_dir, not an explicit file path")
     if source is not None:
         path = path or cookie_path_for_source(source, data_dir=data_dir)
     payload = json.loads(path.read_text(encoding="utf-8")) if path and path.is_file() else None
@@ -103,7 +109,7 @@ def load_cookie_header(
         if not target:
             raise ValueError("a target URL is required for this snapshot")
         return cookies_to_header(payload["cookies"], target, domains=payload["domains"]) or None
-    if source is not None:
+    if source is not None and sender_tag == "default":
         key = f"COOKIE_HTTP_SEEDER_{source.upper().replace('-', '_')}_HEADER"
         if os.environ.get(key, "").strip():
             payload = os.environ[key].strip()
@@ -135,12 +141,13 @@ def save_cookie_header(
     return path
 
 
-def load_request_credentials(*, source: str, url: str, data_dir: Path | None = None) -> dict:
+def load_request_credentials(*, source: str, url: str, data_dir: Path | None = None,
+                             sender_tag: str = "default") -> dict:
     """Read header and version from ONE atomic snapshot, for accurate feedback.
 
     The returned cookie_header is a credential. Do not log this dictionary.
     """
-    doc = read_snapshot(source, data_dir=data_dir)
+    doc = read_snapshot(source, data_dir=data_dir, sender_tag=sender_tag)
     if (not isinstance(doc, dict) or doc.get("schema_version") != 2
             or not doc.get("snapshot_version")):
         raise ValueError("re-seed with extension 0.3+ before reporting feedback")

@@ -1,7 +1,9 @@
+import { senderTag } from "./senders.js";
+import { withSettingsLock } from "./settings_lock.js";
 /** Sources come from the receiver; browser access always needs local approval. */
 export const DEFAULTS = {
   endpoint: "http://127.0.0.1:18765", token: "", autoPushMinutes: 0, syncOnChange: false,
-  approvedSources: {}, connectionId: "", approvedConnectionId: "",
+  senderTag: "default", approvedSources: {}, connectionId: "", approvedConnectionId: "",
 };
 
 export function domainName(value) {
@@ -90,24 +92,28 @@ export async function loadSettings() {
   return { ...DEFAULTS, ...await chrome.storage.local.get(Object.keys(DEFAULTS)) };
 }
 export async function saveSettings(patch) {
-  const old = await loadSettings();
-  if (patch.endpoint !== undefined) patch.endpoint = endpointURL(patch.endpoint);
-  if (patch.token !== undefined && !/^[A-Za-z0-9._-]{16,256}$/.test(patch.token)) throw new Error("Invalid token");
-  if (patch.autoPushMinutes !== undefined) {
-    const minutes = Number(patch.autoPushMinutes);
-    if (!Number.isInteger(minutes) || (minutes !== 0 && (minutes < 15 || minutes > 10080))) {
-      throw new Error("Auto push must be 0 (off), or 15 to 10080 minutes");
+  return withSettingsLock(async () => {
+    const old = await loadSettings();
+    if (patch.senderTag !== undefined) patch.senderTag = senderTag(patch.senderTag);
+    if (patch.endpoint !== undefined) patch.endpoint = endpointURL(patch.endpoint);
+    if (patch.token !== undefined && !/^[A-Za-z0-9._-]{16,256}$/.test(patch.token)) throw new Error("Invalid token");
+    if (patch.autoPushMinutes !== undefined) {
+      const minutes = Number(patch.autoPushMinutes);
+      if (!Number.isInteger(minutes) || (minutes !== 0 && (minutes < 15 || minutes > 10080))) {
+        throw new Error("Auto push must be 0 (off), or 15 to 10080 minutes");
+      }
+      patch.autoPushMinutes = minutes;
     }
-    patch.autoPushMinutes = minutes;
-  }
-  if (patch.syncOnChange !== undefined && typeof patch.syncOnChange !== "boolean") {
-    throw new Error("syncOnChange must be boolean");
-  }
-  if (!old.connectionId || (patch.endpoint !== undefined && patch.endpoint !== old.endpoint) ||
-      (patch.token !== undefined && patch.token !== old.token)) {
-    patch = { ...patch, connectionId: crypto.randomUUID(), approvedSources: {}, approvedConnectionId: "" };
-  }
-  await chrome.storage.local.set(patch);
+    if (patch.syncOnChange !== undefined && typeof patch.syncOnChange !== "boolean") {
+      throw new Error("syncOnChange must be boolean");
+    }
+    if (!old.connectionId || (patch.endpoint !== undefined && patch.endpoint !== old.endpoint) ||
+        (patch.token !== undefined && patch.token !== old.token) ||
+        (patch.senderTag !== undefined && patch.senderTag !== old.senderTag)) {
+      patch = { ...patch, connectionId: crypto.randomUUID(), approvedSources: {}, approvedConnectionId: "" };
+    }
+    await chrome.storage.local.set(patch);
+  });
 }
 export class ReceiverError extends Error {
   constructor(code, message, { retryable = false, retryAfterMs = 0 } = {}) {
@@ -117,6 +123,19 @@ export class ReceiverError extends Error {
 }
 export async function receiverRequest(settings, path, options = {}) {
   const base = endpointURL(settings.endpoint);
+  const tag = senderTag(settings.senderTag);
+  const mutation = options.method && !["GET", "HEAD"].includes(options.method.toUpperCase());
+  if (mutation && tag !== "default") {
+    // Fail BEFORE mutation when an old receiver silently ignores the namespace header.
+    const doc = await receiverRequest(settings, "/v1/sources");
+    if (!Array.isArray(doc.capabilities) || !doc.capabilities.includes("sender_tags")) {
+      throw new ReceiverError("upgrade_required", "请升级接收端以支持发送端标签");
+    }
+  }
+  if (mutation && settings.connectionId &&
+      (await loadSettings()).connectionId !== settings.connectionId) {
+    throw new ReceiverError("approval_required", "连接或标签已变更，请重新加载和授权");
+  }
   if (!/^[A-Za-z0-9._-]{16,256}$/.test(settings.token)) {
     throw new ReceiverError("invalid_token", "Configure a valid receiver token");
   }
@@ -125,7 +144,8 @@ export async function receiverRequest(settings, path, options = {}) {
     response = await fetch(`${base}${path}`, {
       ...options, redirect: "error", credentials: "omit", cache: "no-store",
       signal: AbortSignal.timeout(8000),
-      headers: { "Content-Type": "application/json", ...options.headers, Authorization: `Bearer ${settings.token}` },
+      headers: { "Content-Type": "application/json", ...options.headers, Authorization: `Bearer ${settings.token}`,
+        "X-Sender-Tag": tag },
     });
     // Bound responses, including error pages, and never reflect receiver text.
     const reader = response.body?.getReader();
@@ -172,6 +192,9 @@ export async function receiverRequest(settings, path, options = {}) {
   if (!body || typeof body !== "object" || body.ok !== true) {
     throw new ReceiverError("invalid_response", "Invalid receiver response");
   }
+  if (tag !== "default" && body.sender_tag !== tag) {
+    throw new ReceiverError("upgrade_required", "接收端未确认发送端标签，已停止操作");
+  }
   return body;
 }
 export async function fetchSources(settings) {
@@ -180,18 +203,23 @@ export async function fetchSources(settings) {
   if (!doc.capabilities?.includes("conditional_snapshots")) {
     throw new ReceiverError("upgrade_required", "Receiver 0.3+ required");
   }
+  if (senderTag(settings.senderTag) !== "default" && !doc.capabilities.includes("sender_tags")) {
+    throw new ReceiverError("upgrade_required", "请升级接收端以支持发送端标签");
+  }
   return { ...doc, sources: normalizeSources(doc.sources), connectionId: settings.connectionId };
 }
 export async function approveSources(doc, names = Object.keys(doc.sources)) {
-  const settings = await loadSettings();
-  if (!doc.connectionId || doc.connectionId !== settings.connectionId) throw new Error("Connection changed; reload configuration");
-  const approved = { ...settings.approvedSources };
-  for (const name of names) {
-    if (Object.hasOwn(doc.sources, name)) approved[name] = doc.sources[name];
-    else delete approved[name];
-  }
-  for (const name of Object.keys(approved)) if (!Object.hasOwn(doc.sources, name)) delete approved[name];
-  await chrome.storage.local.set({ approvedSources: approved, approvedConnectionId: settings.connectionId });
+  return withSettingsLock(async () => {
+    const settings = await loadSettings();
+    if (!doc.connectionId || doc.connectionId !== settings.connectionId) throw new Error("Connection changed; reload configuration");
+    const approved = { ...settings.approvedSources };
+    for (const name of names) {
+      if (Object.hasOwn(doc.sources, name)) approved[name] = doc.sources[name];
+      else delete approved[name];
+    }
+    for (const name of Object.keys(approved)) if (!Object.hasOwn(doc.sources, name)) delete approved[name];
+    await chrome.storage.local.set({ approvedSources: approved, approvedConnectionId: settings.connectionId });
+  });
 }
 export async function collectSourceCookies(spec) {
   const origins = sourceOrigins(spec);

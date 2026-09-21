@@ -17,19 +17,19 @@ from typing import Any
 from .cookies import normalize_sources
 from .notify import notify_needed, notify_pushed
 from .paths import atomic_write_text, ensure_data_dir, token_file, webhook_file
-from .store import read_snapshot, save_snapshot
+from .process_lock import DataDirectoryInUse, DataDirectoryLock
+from .senders import MAX_SENDERS, list_sender_tags, sender_directory, sender_tag
+from .store import load_sources, read_snapshot, save_snapshot
 from .sync_state import PreconditionRequired, SnapshotConflict, SyncState
 
 _MAX_BODY_BYTES = 512 * 1024
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]{16,256}$")
-_STATUS_LOCK = threading.Lock()
-_LAST_PUSH: dict[str, dict[str, Any]] = {}
-_NOTIFY_LOCK = threading.Lock()
-_PENDING_NOTIFY_SOURCES: set[str] = set()
-_NOTIFY_TIMER: threading.Timer | None = None
-_ALLOWED_SOURCES: frozenset[str] = frozenset()
-_DATA_DIR: Path = default_data_dir()
+_EXTENSION_ORIGIN = re.compile(r"^chrome-extension://[a-p]{32}$")
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+class ConflictError(ValueError):
+    """Reload configuration before retrying."""
 
 
 def normalize_bind_host(host: str) -> str:
@@ -83,12 +83,47 @@ class ReceiverState:
         self.revision = secrets.token_hex(16)
         self.notify_timer: threading.Timer | None = None
         self.pending_notify: set[str] = set()
+        self.sender_tag = "default"
+        self.notification_dir = self.data_dir
+        self._senders: dict[str, ReceiverState] = {}
+
+    def for_sender(self, tag: str) -> ReceiverState:
+        """One independently locked state/configuration per storage label."""
+        tag = sender_tag(tag)
+        if tag == "default":
+            return self
+        with self.lock:
+            # Recheck the directory even for a cached state (no symlink aliases).
+            directory = sender_directory(self.data_dir, tag)
+            if tag in self._senders:
+                return self._senders[tag]
+            config = directory / "sources.json"
+            if config.is_symlink():
+                raise ValueError("sender configuration must not be a symlink")
+            if config.is_file():
+                sources = load_sources(config)
+            else:
+                existing = set(list_sender_tags(self.data_dir)) | set(self._senders)
+                if len(existing - {"default"}) >= MAX_SENDERS:
+                    raise ValueError("sender namespace limit reached")
+                # Seed configuration only. NEVER copy default cookies or sync metadata.
+                sources = json.loads(json.dumps(self.sources))
+                ensure_data_dir(directory.parent)
+                ensure_data_dir(directory)
+                atomic_write_text(config, json.dumps({"schema_version": 1,
+                                                     "sources": sources}) + "\n")
+            child = ReceiverState(sources, directory, config)
+            child.sender_tag = tag
+            child.notification_dir = self.data_dir
+            self._senders[tag] = child
+            return child
 
     def document(self) -> dict[str, Any]:
         with self.lock:
             return {"ok": True, "schema_version": 1, "protocol_version": 2,
                     "sources": json.loads(json.dumps(self.sources)), "revision": self.revision,
-                    "capabilities": ["conditional_snapshots", "validation_feedback"]}
+                    "sender_tag": self.sender_tag,
+                    "capabilities": ["conditional_snapshots", "validation_feedback", "sender_tags"]}
 
     def check_revision(self, revision: object) -> None:
         if not isinstance(revision, str) or revision != self.revision:
@@ -167,12 +202,12 @@ class ReceiverState:
             result, should_notify = self.sync.feedback(payload, notify=notify)
             if should_notify:
                 # Fixed structured reason only: never send crawler response bodies or tokens.
-                reason = f"{source}: {payload['reason_code']}"
+                reason = f"{self.sender_tag}/{source}: {payload['reason_code']}"
 
                 def send() -> None:
                     try:
                         notify_needed(reason=reason,
-                                      webhook_path=webhook_file(self.data_dir))
+                                      webhook_path=webhook_file(self.notification_dir))
                     except Exception:  # noqa: BLE001
                         pass  # Notification cannot break the persisted report.
                 worker = threading.Thread(target=send, daemon=True)
@@ -184,7 +219,9 @@ class ReceiverState:
             sources = sorted(self.pending_notify)
             self.pending_notify.clear()
         if sources:
-            status = notify_pushed(sources=sources, webhook_path=webhook_file(self.data_dir))
+            status = notify_pushed(
+                sources=[f"{self.sender_tag}/{name}" for name in sources],
+                webhook_path=webhook_file(self.notification_dir))
             print(f"[cookie-http-seeder] notify: {status.split(':', 1)[0]}", flush=True)
 
     def status(self) -> dict[str, Any]:
@@ -208,7 +245,8 @@ class ReceiverState:
                     sync = {"validation": "unverified", "freshness": "unknown",
                             "syncError": "unreadable_sync_state"}
                 sources[name] = {**entry, "enabled": spec["enabled"], **sync}
-            return {"ok": True, "sources": sources, "config_revision": self.revision,
+            return {"ok": True, "sender_tag": self.sender_tag,
+                    "sources": sources, "config_revision": self.revision,
                     "observedAt": _utc_now()}
 
 
@@ -275,7 +313,7 @@ def _invalid_constant(_value: str) -> None:
 
 
 def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTPRequestHandler]:
-    state = _state()
+    root_state = _state()
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -288,6 +326,8 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
             pass  # Never log URLs, request bodies, credentials or reflected input.
 
         def _send(self, code: int, payload: dict) -> None:
+            if payload.get("ok") is True:
+                payload = {**payload, "sender_tag": getattr(self, "sender_tag", "default")}
             body = (json.dumps(payload, ensure_ascii=False) + "\n").encode()
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -312,7 +352,16 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
                      and secrets.compare_digest(value.encode(), expected_token.encode()))
             if not valid:
                 self._send(401, {"ok": False, "error": "unauthorized"})
-            return valid
+                return False
+            tags = self.headers.get_all("X-Sender-Tag", [])
+            try:
+                if len(tags) > 1:
+                    raise ValueError("duplicate sender tag")
+                self.sender_tag = sender_tag(tags[0] if tags else "default")
+            except ValueError:
+                self._send(400, {"ok": False, "error": "invalid_sender_tag"})
+                return False
+            return True
 
         def handle_expect_100(self) -> bool:
             if not self._authorize():
@@ -340,6 +389,11 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
             if self.path == "/healthz":
                 self._send(200, {"status": "ok"})
             elif self._authorize():
+                try:
+                    state = root_state.for_sender(self.sender_tag)
+                except (ValueError, OSError, TypeError):
+                    self._send(400, {"ok": False, "error": "invalid_sender_or_storage"})
+                    return
                 if self.path == "/v1/sources":
                     self._send(200, state.document())
                 elif self.path == "/v1/status":
@@ -356,6 +410,7 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
             if not self._authorize():
                 return
             try:
+                state = root_state.for_sender(self.sender_tag)
                 if self.command == "POST" and self.path == "/v1/cookies":
                     self._send(410, {"ok": False, "error": "upgrade_to_v2_structured_cookies"})
                     return
@@ -402,6 +457,15 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
 
 
 def serve(*, host: str, port: int, token: str, notify: bool = False) -> None:
+    # The same data directory must not be served twice, even on different ports.
+    try:
+        with DataDirectoryLock(_state().data_dir):
+            _serve(host=host, port=port, token=token, notify=notify)
+    except DataDirectoryInUse:
+        raise SystemExit("data directory already in use; stop the other receiver first") from None
+
+
+def _serve(*, host: str, port: int, token: str, notify: bool = False) -> None:
     bind_host = normalize_bind_host(host)
     listen_url = format_listen_url(bind_host, port)
     if bind_host not in _LOOPBACK_HOSTS:
@@ -426,6 +490,9 @@ def serve(*, host: str, port: int, token: str, notify: bool = False) -> None:
             )
             time.sleep(delay)
             delay = min(delay * 2, 30.0)
+    # Drain accepted requests before releasing the directory lock on shutdown.
+    server.daemon_threads = False
+    server.block_on_close = True
     server.timeout = 30
     try:
         server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
@@ -433,7 +500,7 @@ def serve(*, host: str, port: int, token: str, notify: bool = False) -> None:
         pass
     print(
         f"[cookie-http-seeder] listening {listen_url} "
-        f"(POST /v1/cookies, GET /v1/status, GET /healthz, notify={notify})",
+        f"(POST /v2/cookies, GET /v1/status, GET /healthz, notify={notify})",
         flush=True,
     )
     try:

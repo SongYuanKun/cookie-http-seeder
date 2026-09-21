@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from .cookies import request_url
+from .senders import sender_tag as validate_sender_tag
 
 
 class ClientError(RuntimeError):
@@ -32,7 +33,9 @@ def receiver_origin(endpoint: str) -> str:
 
 
 class ReceiverClient:
-    def __init__(self, endpoint: str, token: str, *, timeout: float = 8):
+    def __init__(self, endpoint: str, token: str, *, timeout: float = 8,
+                 sender_tag: str = "default"):
+        self.sender_tag = validate_sender_tag(sender_tag)
         self.endpoint = receiver_origin(endpoint)
         if not re.fullmatch(r"[A-Za-z0-9._-]{16,256}", token):
             raise ValueError("invalid receiver token")
@@ -45,11 +48,17 @@ class ReceiverClient:
         allowed_path = r"/(?:v1/(?:status|sources|feedback)|v2/sync/[a-z][a-z0-9_-]{0,31})"
         if not re.fullmatch(allowed_path, path):
             raise ValueError("unsupported receiver path")
+        if payload is not None and self.sender_tag != "default":
+            # A legacy server might silently ignore X-Sender-Tag. Verify before mutation.
+            doc = self.request("/v1/sources")
+            if "sender_tags" not in doc.get("capabilities", []):
+                raise ClientError("sender_tags_unsupported")
         data = json.dumps(payload).encode() if payload is not None else None
         request = Request(self.endpoint + path, data=data,
                           method="POST" if data is not None else "GET",
                           headers={"Authorization": f"Bearer {self.token}",
-                                   "Content-Type": "application/json"})
+                                   "Content-Type": "application/json",
+                                   "X-Sender-Tag": self.sender_tag})
         try:
             with self.opener.open(request, timeout=self.timeout) as response:
                 raw = response.read(1024 * 1024 + 1)
@@ -58,6 +67,8 @@ class ReceiverClient:
             body = json.loads(raw)
             if not isinstance(body, dict) or body.get("ok") is not True:
                 raise ClientError("invalid_response")
+            if self.sender_tag != "default" and body.get("sender_tag") != self.sender_tag:
+                raise ClientError("sender_tags_unsupported")
             return body
         except HTTPError as error:
             error.close()

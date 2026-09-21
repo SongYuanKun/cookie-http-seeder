@@ -8,13 +8,19 @@ from pathlib import Path
 from .client import ClientError, ReceiverClient
 from .paths import token_file
 from .receiver import resolve_token
+from .senders import sender_directory
 from .store import load_sources
 from .sync_state import SyncState
 
 
 def diagnose(data_dir: Path, *, endpoint: str = "http://127.0.0.1:18765",
              sources_path: Path | None = None, token_path: Path | None = None,
-             local_only: bool = False) -> dict:
+             local_only: bool = False, sender_tag: str = "default") -> dict:
+    root_dir = data_dir
+    data_dir = sender_directory(root_dir, sender_tag)
+    if sender_tag != "default":
+        # No fallback to global --sources/environment/example configuration.
+        sources_path = data_dir / "sources.json"
     checks: list[dict] = []
 
     def add(name: str, status: str, code: str, action: str = "") -> None:
@@ -43,7 +49,7 @@ def diagnose(data_dir: Path, *, endpoint: str = "http://127.0.0.1:18765",
             "Fix the sources JSON or configured file path.")
     token = None
     try:
-        path = token_path or token_file(data_dir)
+        path = token_path or token_file(root_dir)
         token = resolve_token(token=os.environ.get("COOKIE_HTTP_SEEDER_TOKEN"), token_file=path)
         add("token", "ok", "configured")
         if os.name == "posix" and path.is_file() and path.stat().st_mode & 0o077:
@@ -67,7 +73,7 @@ def diagnose(data_dir: Path, *, endpoint: str = "http://127.0.0.1:18765",
                     "Inspect the local snapshot/metadata files privately.")
     if not local_only and token is not None:
         try:
-            client = ReceiverClient(endpoint, token)
+            client = ReceiverClient(endpoint, token, sender_tag=sender_tag)
             remote = client.request("/v1/sources")
             client.request("/v1/status")
             add("receiver", "ok", "authenticated")
@@ -86,4 +92,4 @@ def diagnose(data_dir: Path, *, endpoint: str = "http://127.0.0.1:18765",
             add("receiver", "error", "invalid_endpoint",
                 "Use an HTTPS origin or http://127.0.0.1:18765.")
     return {"ok": all(c["status"] != "error" for c in checks), "checks": checks,
-            "snapshots": snapshots, "localOnly": local_only}
+            "snapshots": snapshots, "localOnly": local_only, "sender_tag": sender_tag}
