@@ -20,6 +20,7 @@ from .paths import (
     webhook_file,
 )
 from .receiver import (
+    ReceiverState,
     configure,
     default_token_file,
     ensure_token_file,
@@ -27,6 +28,7 @@ from .receiver import (
     serve,
     status_document,
 )
+from .senders import list_sender_tags, sender_directory, sender_tag
 from .store import default_data_dir, load_cookie_header, load_sources
 from .time_display import display_times
 
@@ -41,6 +43,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init-token", help="create cookie-receiver.token if missing")
     sub.add_parser("paths", help="print resolved data paths")
+    sub.add_parser("senders", help="list initialized sender labels (no credentials)")
     serve_p = sub.add_parser("serve", help="run the loopback receiver")
     serve_p.add_argument("--host", default=None)
     serve_p.add_argument("--port", type=int, default=None)
@@ -69,6 +72,9 @@ def _build_parser() -> argparse.ArgumentParser:
     report.add_argument("--reason-code", required=True)
     report.add_argument("--endpoint", default="http://127.0.0.1:18765")
     report.add_argument("--token-file", type=Path, default=None)
+    for command in (status, doctor, report, header):
+        command.add_argument("--sender-tag", type=sender_tag, default="default",
+                             help="select one sender label; default keeps legacy storage")
     for command in (status, doctor, report):
         command.add_argument("--json", dest="raw_json", action="store_true",
                              help="machine-readable JSON with original UTC timestamps; "
@@ -86,10 +92,26 @@ def _paths_document(data_dir: Path) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     data_dir = args.data_dir or default_data_dir()
+    if args.command == "senders":
+        print(json.dumps({"senders": list_sender_tags(data_dir)}, indent=2))
+        return 0
+    if args.command == "status" and args.sender_tag != "default":
+        selected = sender_directory(data_dir, args.sender_tag)
+        config = selected / "sources.json"
+        if not config.is_file() or config.is_symlink():
+            print(json.dumps({"ok": False, "error": "sender_not_initialized"}))
+            return 1
+        state = ReceiverState(load_sources(config), selected, config)
+        state.sender_tag = args.sender_tag
+        doc = {**state.status(), "dataDir": str(selected)}
+        print(json.dumps(doc if args.raw_json else display_times(doc),
+                         ensure_ascii=False, indent=2))
+        return 0
     if args.command == "doctor":
         from .diagnostics import diagnose
         doc = diagnose(data_dir, endpoint=args.endpoint, sources_path=args.sources,
-                       token_path=args.token_file, local_only=args.local_only)
+                       token_path=args.token_file, local_only=args.local_only,
+                       sender_tag=args.sender_tag)
         print(json.dumps(doc if args.raw_json else display_times(doc),
                          ensure_ascii=False, indent=2))
         return 0 if doc["ok"] else 1
@@ -98,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             token = resolve_token(token=os.environ.get(ENV_TOKEN),
                                   token_file=args.token_file or token_file(data_dir))
-            result = ReceiverClient(args.endpoint, token).report(
+            result = ReceiverClient(args.endpoint, token, sender_tag=args.sender_tag).report(
                 args.source, args.snapshot_version, args.result, args.reason_code)
         except (OSError, ValueError, SystemExit, ClientError):
             print(json.dumps({"ok": False,
@@ -131,7 +153,8 @@ def main(argv: list[str] | None = None) -> int:
                          ensure_ascii=False, indent=2))
         return 0
     if args.command == "header":
-        header = load_cookie_header(source=args.source, data_dir=data_dir, url=args.url)
+        header = load_cookie_header(source=args.source, data_dir=data_dir, url=args.url,
+                                    sender_tag=args.sender_tag)
         if header:
             print(header)
         return 0 if header else 1

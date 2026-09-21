@@ -11,6 +11,7 @@ button{padding:8px 12px;margin:4px 6px 4px 0;cursor:pointer;border:1px solid #95
 button:disabled{opacity:.5;cursor:wait}button.primary{background:#175b88;color:white;border-color:#175b88}
 small,.hint{color:#536575}table{border-collapse:collapse;width:100%;font-size:14px}td,th{padding:10px 8px;text-align:left;border-bottom:1px solid #dce3e9;vertical-align:top;overflow-wrap:anywhere}
 .scroll{overflow:auto}pre{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:#a42323}.ok{color:#17643f}
+.source-status{white-space:pre-line;min-width:255px}.attention{color:#805113}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}@media(max-width:700px){.two{display:block}}
 </style></head><body><main>
 <h1>Cookie HTTP Seeder</h1>
@@ -18,15 +19,19 @@ small,.hint{color:#536575}table{border-collapse:collapse;width:100%;font-size:14
 <section><h2>1. 连接接收端</h2>
 <form id="connection-form">
 <label>接收端地址<input id="endpoint" required value="http://127.0.0.1:18765" autocomplete="off"></label>
+<label>发送端标签<input id="sender-tag" required value="default" maxlength="32" pattern="[a-z0-9][a-z0-9_-]{0,31}" autocomplete="off" placeholder="例如 home-pc、work-pc"></label>
+<small>不同标签分别保存；相同标签共用一份数据。default 使用旧数据区域。标签不是密码或权限边界；更换后需重新授权，不会自动迁移或删除旧数据。</small>
 <div class="two"><label>Token<input id="token" type="password" required autocomplete="off"></label>
 <label>定时推送（分钟；0 关闭，启用至少 15）<input id="autoPushMinutes" type="number" min="0" max="10080" step="1" value="0" required></label></div>
 <label><input id="syncOnChange" type="checkbox"> Cookie 变化后自动同步（默认关闭，约 30 秒合并窗口）</label>
 <button class="primary" type="submit">保存连接并加载配置</button><button id="reload" type="button">重新加载配置</button>
 </form><small>远程必须 HTTPS；HTTP 仅限 localhost / 127.0.0.1，可通过 SSH 转发。更换地址或 Token 后需重新授权来源。</small></section>
 <pre id="status" role="status" aria-live="polite">请配置连接。</pre>
-<section><h2>2. 管理来源</h2>
-<p class="hint">配置来自接收端，但不会自动获得浏览器权限。授权后才会读取对应域名。修改或删除来源会清空它的旧快照。</p>
+<section><h2>2. 管理来源</h2><p id="sender-context" class="hint"></p>
+<p class="hint">配置来自接收端，但不会自动获得浏览器权限。授权后才会读取对应域名。修改或删除来源会清空它的旧快照。“仅授权”不清空快照；“撤销本机授权”只停止本机同步，不删除接收端数据。</p>
 <button id="approve" type="button">授权当前显示的配置</button><button id="push-all" type="button">立即推送全部已启用来源</button>
+<button id="refresh-sources" type="button">刷新授权 / 同步 / 登录状态</button>
+<p id="status-updated" class="hint" role="status"></p>
 <div class="scroll"><table><thead><tr><th>来源</th><th>域名 / 固定输出目标 URL</th><th>状态</th><th>操作</th></tr></thead><tbody id="sources"></tbody></table></div>
 <form id="source-form"><div class="two">
 <label>来源标识<input id="source-name" required pattern="[a-z][a-z0-9_-]{0,31}" placeholder="mysite"></label>
