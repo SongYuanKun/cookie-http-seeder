@@ -29,6 +29,7 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+session = ["cryptography>=41", "playwright>=1.61"]
 
 [project.urls]
 Homepage = "https://github.com/SongYuanKun/cookie-http-seeder"

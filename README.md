@@ -6,10 +6,12 @@
 **把自己授权的浏览器 Cookie，按发送端标签同步给 HTTP 客户端。**
 
 浏览器负责正常登录，扩展采集明确授权的非分区 Cookie，接收端保存结构化快照，
-消费者按实际请求 URL 选择适用 Cookie。不自动登录、不处理验证码、不复制完整浏览器会话。
+消费者按实际请求 URL 选择适用 Cookie。另有手动触发的加密会话包，用于把可导出的登录状态
+导入另一台机器的独立 Chrome 配置目录。不自动登录、不处理验证码，也不能保证源站接受迁移的会话。
 登录是否有效由爬虫按站点规则反馈，不能由“同步成功”推断。
 
-当前代码包含结构化快照、动态网站配置、可靠同步、当地时间显示、单实例保护和发送端标签。
+当前代码包含结构化快照、动态网站配置、可靠同步、当地时间显示、单实例保护、发送端标签
+和可迁移加密会话包。
 包与扩展的版本元数据仍为 `0.3.0`；标签支持通过 `sender_tags` 能力协商判断，
 不能仅凭版本号判断是否支持。变更记录见 [CHANGELOG](CHANGELOG.md)。
 
@@ -49,6 +51,37 @@ python3 -m venv .venv
 进入“管理网站与连接”，填写接收端地址、Token 和发送端标签，例如 `home-pc`。
 保存连接并加载配置，新增或选择网站来源，确认域名与目标 URL，显式授权后推送。
 不同发送端需要独立保存时使用不同标签；相同标签、相同来源仍操作同一份快照。
+
+## 可迁移会话包（手动）
+
+扩展弹窗点“采集可迁移会话包”，选择已批准来源、原网站标签和至少 12 字符的口令。
+点开始会明确触发原网站标签重新加载；未提交的表单内容会丢失。扩展只接收该标签的这次顶层 GET/HEAD
+页面请求，记录发出的请求头、URL、状态码，以及该来源的非分区 Cookie、当前页面原点的
+localStorage/sessionStorage 和浏览器环境。城市/区县是用户手工标注；接收端记录的 IP 是它看到的
+连接对端，可能是隧道或代理地址，**不是源站看到的出口 IP**。口令和明文只在扩展内存中，
+接收端只保存 AES-256-GCM 密文和版本元数据，`GET /v3/session-bundles/{source}` 只返回元数据。
+
+在目标机器安装导入依赖，并把该来源的 `{source}-session.json` 密文文件和来源配置安全复制过去。
+默认标签的密文文件位于数据根目录；其他标签位于 `senders/{tag}/`。文件与口令文件均需 `0600`，
+新配置目录必须不存在。下面命令只在目标机器执行，`--open-url` 显式打开站点；不带此参数时
+只导入可持久化的数据后关闭浏览器；sessionStorage 仅在带 `--open-url` 的当前浏览器会话内注入。
+
+```bash
+python3 -m pip install -e '.[session]'
+cookie-http-seeder --data-dir ./data --sources ./data/sources.json \
+  session-import site --bundle ./data/site-session.json \
+  --profile ./profiles/site-transfer-1 --passphrase-file ./session-passphrase \
+  --open-url https://example.com/account
+```
+
+导入只接受启用的同名来源和允许的 HTTPS 域名。已有配置目录会被拒绝，避免覆盖正在运行的
+GTR 多来源 Chrome。导入后需在新窗口人工确认登录是否仍有效；失败时按站点正常登录，
+不要把上传成功当作会话有效。IndexedDB、分区 Cookie、Service Worker、设备绑定密钥、
+源站出口 IP 和服务器侧状态不在迁移范围内。不会因此自动恢复已暂停的采集。
+
+加密格式为 `schema_version=1`、`source`、`kdf=PBKDF2-SHA256`、`iterations=310000`、
+`cipher=AES-256-GCM`、16 字节随机 salt、12 字节随机 nonce 和 Base64 密文；
+认证附加数据为 UTF-8 `portable-session:{source}:1`。口令丢失无法解密。
 
 浏览器和接收端不在同一机器时，推荐 SSH 本地转发：
 

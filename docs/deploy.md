@@ -12,11 +12,13 @@ $data/
   .receiver.lock                    # 运行中不可删除/替换
   sources.json                     # default 配置，可由显式 --sources 指定其他文件
   {source}-cookies.json             # default 历史路径
+  {source}-session.json             # 可选；手动采集的加密会话包，0600
   .{source}-sync.json
   senders/
     home-pc/
       sources.json
       {source}-cookies.json
+      {source}-session.json
       .{source}-sync.json
     work-pc/
       sources.json
@@ -34,6 +36,12 @@ checkout 示例或包内默认值加载，界面修改写入根目录 `sources.j
 
 **Token 和 webhook 始终在根目录或显式覆盖路径，不需要为每个标签创建 Token。**
 标签是共享 Token 下的存储分组，不限制其他 Token 持有者的访问，不能用作多租户隔离。
+
+可迁移会话包与 Cookie 快照分开存放，不改变定时同步或消费者读取路径。
+接收端只需现有 Python 运行依赖；目标机器执行 `session-import` 时才安装可选
+`cookie-http-seeder[session]`（`cryptography` 和 Playwright），并需要本地 Chrome。
+密文文件需通过受信任渠道复制到目标机器，目标机器准备同名来源配置和 `0600` 口令文件。
+只使用新的配置目录导入。详情见 [README 的手动会话包流程](../README.md#可迁移会话包手动)。
 
 ## Docker Compose
 
