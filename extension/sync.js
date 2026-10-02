@@ -9,6 +9,12 @@ export const RETRY_ALARM = "cookie-http-seeder-pending";
 export const MAX_ATTEMPTS = 5;
 export const DEBOUNCE_MS = 30_000;
 const PENDING = new Set(["pending", "retrying", "syncing"]);
+const RECOVERABLE = new Set(["network_error", "server_unavailable", "collection_failed",
+  "snapshot_conflict", "worker_interrupted"]);
+function recoveryDelay(settings) {
+  const minutes = settings.recoveryProbeMinutes;
+  return Number.isInteger(minutes) && minutes >= 15 && minutes <= 10080 ? minutes * 60_000 : 0;
+}
 const SAFE_CODES = new Set([
   "network_error", "server_unavailable", "collection_failed", "snapshot_conflict",
   "invalid_token", "unauthorized", "forbidden", "not_found", "upgrade_required",
@@ -48,7 +54,14 @@ export class SyncEngine {
     for (const name of Object.keys(state.jobs)) {
       if (!Object.hasOwn(settings.approvedSources || {}, name)) delete state.jobs[name];
       else if (!settings.approvedSources[name].enabled) {
-        Object.assign(state.jobs[name], { phase: "paused", nextAt: null });
+        Object.assign(state.jobs[name], { phase: "paused", nextAt: null, probeAt: null });
+      } else {
+        const job = state.jobs[name], delay = recoveryDelay(settings);
+        if (!delay || !RECOVERABLE.has(job.errorCode) || !["exhausted", "probing"].includes(job.phase)) {
+          job.probeAt = null;
+        } else if (!Number.isFinite(job.probeAt)) {
+          job.probeAt = this.now() + delay;
+        }
       }
     }
     return { settings, state };
@@ -60,9 +73,12 @@ export class SyncEngine {
     return true;
   }
   async arm(state) {
-    const due = Object.values(state.jobs).filter(j => PENDING.has(j.phase) && Number.isFinite(j.nextAt));
+    if ((await this.settings()).connectionId !== state.connectionId) return;
+    const due = Object.values(state.jobs).flatMap(j =>
+      PENDING.has(j.phase) && Number.isFinite(j.nextAt) ? [j.nextAt] :
+        j.phase === "exhausted" && Number.isFinite(j.probeAt) ? [j.probeAt] : []);
     if (!due.length) { await this.api.alarms.clear(RETRY_ALARM); return; }
-    const when = Math.max(this.now() + DEBOUNCE_MS, Math.min(...due.map(j => j.nextAt)));
+    const when = Math.max(this.now() + DEBOUNCE_MS, Math.min(...due));
     const existing = await this.api.alarms.get(RETRY_ALARM);
     if (!existing || existing.scheduledTime < this.now() || existing.scheduledTime > when) {
       await this.api.alarms.create(RETRY_ALARM, { when });
@@ -70,12 +86,21 @@ export class SyncEngine {
   }
   recover() {
     return this.serial(async () => {
-      const { state } = await this.context();
+      const { settings, state } = await this.context();
       for (const job of Object.values(state.jobs)) {
+        if (job.phase === "probing") {
+          job.phase = "exhausted"; job.errorCode = "worker_interrupted";
+          const delay = recoveryDelay(settings);
+          job.probeAt = delay ? Math.max(job.probeAt || 0, (job.lastProbeAt || this.now()) + delay) : null;
+          job.nextAt = null; continue;
+        }
         if (job.phase !== "syncing") continue;
         job.phase = job.attempts >= MAX_ATTEMPTS ? "exhausted" : "retrying";
         job.errorCode = "worker_interrupted";
         job.nextAt = job.phase === "exhausted" ? null : Math.max(this.now(), job.nextAt || 0);
+        if (job.phase === "exhausted" && recoveryDelay(settings)) {
+          job.probeAt = this.now() + recoveryDelay(settings);
+        }
       }
       await this.save(state); await this.arm(state); return state;
     });
@@ -97,7 +122,7 @@ export class SyncEngine {
         state.jobs[source] = {
           phase: "pending", attempts: manual ? 0 : old?.phase === "pending" ? old.attempts : 0,
           reason, queuedAt: first, nextAt: manual ? now : Math.min(now + DEBOUNCE_MS, first + 60_000),
-          lastSuccessAt: old?.lastSuccessAt ?? null, errorCode: null,
+          lastSuccessAt: old?.lastSuccessAt ?? null, errorCode: null, probeAt: null,
         };
       }
       await this.save(state); await this.arm(state); return state;
@@ -119,41 +144,59 @@ export class SyncEngine {
       const { settings, state } = await this.context();
       const results = {};
       const due = Object.entries(state.jobs).filter(([, j]) =>
-        PENDING.has(j.phase) && j.nextAt <= this.now(),
+        (PENDING.has(j.phase) && j.nextAt <= this.now()) ||
+          (j.phase === "exhausted" && Number.isFinite(j.probeAt) && j.probeAt <= this.now()),
       ).slice(0, limit);
       for (const [source, job] of due) {
-        if ((job.reason === "change" && !settings.syncOnChange) ||
-            (job.reason === "periodic" && !settings.autoPushMinutes)) {
+        const probing = job.phase === "exhausted";
+        if (!probing && ((job.reason === "change" && !settings.syncOnChange) ||
+            (job.reason === "periodic" && !settings.autoPushMinutes))) {
           Object.assign(job, { phase: "paused", nextAt: null }); continue;
         }
-        if (job.attempts >= MAX_ATTEMPTS) {
+        if (!probing && job.attempts >= MAX_ATTEMPTS) {
           Object.assign(job, { phase: "exhausted", nextAt: null }); continue;
         }
-        job.attempts += 1;
-        Object.assign(job, { phase: "syncing", lastAttemptAt: this.now(),
-          nextAt: this.now() + retryDelay(job.attempts, this.random) });
+        if (probing) {
+          Object.assign(job, { phase: "probing", lastProbeAt: this.now(), nextAt: null,
+            probeAt: this.now() + recoveryDelay(settings) });
+        } else {
+          job.attempts += 1;
+          Object.assign(job, { phase: "syncing", lastAttemptAt: this.now(),
+            nextAt: this.now() + retryDelay(job.attempts, this.random) });
+        }
         if (!await this.save(state)) break; // Durable intent BEFORE any request.
         try {
           const doc = await this.getSources(settings);
           if (!Object.hasOwn(doc.sources, source) || !doc.sources[source].enabled) {
-            Object.assign(job, { phase: "paused", nextAt: null, errorCode: null });
+            Object.assign(job, { phase: "paused", nextAt: null, probeAt: null, errorCode: null });
             results[source] = { ok: false, code: "paused", error: "Source removed or paused" };
           } else {
             if (!sourceApproved(settings, source, doc.sources[source])) {
               throw new ReceiverError("approval_required", "Source approval required");
             }
+            const latest = await this.settings();
+            if (latest.connectionId !== state.connectionId ||
+                !sourceApproved(latest, source, doc.sources[source])) {
+              throw new ReceiverError("approval_required", "Approval changed; push cancelled");
+            }
+            if (probing && !recoveryDelay(latest)) {
+              Object.assign(job, { phase: "exhausted", probeAt: null }); continue;
+            }
             // pushSource fetches a fresh version and recollects on EVERY attempt.
             const result = await this.push(source, doc, settings);
-            Object.assign(job, { phase: "succeeded", nextAt: null, errorCode: null,
+            Object.assign(job, { phase: "succeeded", nextAt: null, probeAt: null, errorCode: null,
               lastSuccessAt: this.now(), unchanged: !!result.unchanged, cookieCount: result.cookieCount });
             results[source] = result;
           }
         } catch (error) {
           const failure = safeFailure(error);
-          const retry = failure.retryable && job.attempts < MAX_ATTEMPTS;
+          const retry = !probing && failure.retryable && job.attempts < MAX_ATTEMPTS;
+          const probeDelay = recoveryDelay(await this.settings());
+          const canProbe = failure.retryable && RECOVERABLE.has(failure.code) && probeDelay > 0;
           Object.assign(job, { phase: retry ? "retrying" : failure.retryable ? "exhausted" : "blocked",
             errorCode: failure.code,
-            nextAt: retry ? this.now() + Math.max(retryDelay(job.attempts, this.random), failure.retryAfterMs) : null });
+            nextAt: retry ? this.now() + Math.max(retryDelay(job.attempts, this.random), failure.retryAfterMs) : null,
+            probeAt: !retry && canProbe ? this.now() + Math.max(probeDelay, failure.retryAfterMs) : null });
           results[source] = { ok: false, code: failure.code, error: failure.code,
             queued: retry, nextAttemptAt: job.nextAt, attempts: job.attempts };
         }

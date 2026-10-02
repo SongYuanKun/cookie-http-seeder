@@ -4,6 +4,8 @@
 |---|---|
 | `sources.json` | 与包内默认配置同步的默认来源样例 |
 | `sources.minimal.json` | 自建站点最小配置模板 |
+| `crawl_with_feedback.py` | 完整版本绑定反馈与暂停恢复的一次请求示例 |
+| `response-rules.example.json` | 显式响应分类模板，须替换为实际站点规则 |
 | `consume_cookies.py` | 按标签读取快照，或向明确的 URL 发送一次请求 |
 
 ## 网站配置
@@ -56,3 +58,6 @@ credentials = load_request_credentials(
 
 反馈的完整示例见 [README](../README.md) 和 [标签协议](../docs/sender-tags.md)。
 面向人的更新时间使用当地 `YYYY-MM-DD HH:mm:ss`；文件/API 格式保持原样。
+
+完整接入使用 [爬虫接入指南](../docs/consumer-recovery.md) 的 `crawl_with_feedback.py` 命令。
+规则模板使用虚构业务字段，不代表贝壳或其他站点的真实协议。

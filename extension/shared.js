@@ -3,6 +3,7 @@ import { withSettingsLock } from "./settings_lock.js";
 /** Sources come from the receiver; browser access always needs local approval. */
 export const DEFAULTS = {
   endpoint: "http://127.0.0.1:18765", token: "", autoPushMinutes: 0, syncOnChange: false,
+  recoveryProbeMinutes: 0, loginPollMinutes: 0,
   senderTag: "default", approvedSources: {}, connectionId: "", approvedConnectionId: "",
 };
 
@@ -49,7 +50,8 @@ export function normalizeSources(raw) {
     if (!/^[a-z][a-z0-9_-]{0,31}$/.test(name) || !spec || typeof spec !== "object" || Array.isArray(spec)) {
       throw new Error("Invalid source definition");
     }
-    if (Object.keys(spec).some(k => !["label", "domains", "target_url", "enabled"].includes(k))) {
+    if (Object.keys(spec).some(k => !["label", "domains", "target_url", "enabled",
+      "stale_after_seconds", "validation_ttl_seconds"].includes(k))) {
       throw new Error("Unknown source fields; credentials cannot be imported");
     }
     if (!Array.isArray(spec.domains) || !spec.domains.length || spec.domains.length > 32) {
@@ -65,6 +67,14 @@ export function normalizeSources(raw) {
       throw new Error("Target URL is outside the source allow-list");
     }
     result[name] = { label, domains, target_url: target, enabled };
+    for (const field of ["stale_after_seconds", "validation_ttl_seconds"]) {
+      if (Object.hasOwn(spec, field)) {
+        if (!Number.isInteger(spec[field]) || spec[field] < 60 || spec[field] > 2592000) {
+          throw new Error("来源阈值须为 60–2592000 秒的整数");
+        }
+        result[name][field] = spec[field];
+      }
+    }
   }
   return result;
 }
@@ -106,6 +116,12 @@ export async function saveSettings(patch) {
     }
     if (patch.syncOnChange !== undefined && typeof patch.syncOnChange !== "boolean") {
       throw new Error("syncOnChange must be boolean");
+    }
+    for (const field of ["recoveryProbeMinutes", "loginPollMinutes"]) {
+      if (patch[field] !== undefined && (!Number.isInteger(patch[field]) ||
+          (patch[field] !== 0 && (patch[field] < 15 || patch[field] > 10080)))) {
+        throw new Error("恢复探测/登录提醒须为 0（关闭）或 15–10080 分钟");
+      }
     }
     if (!old.connectionId || (patch.endpoint !== undefined && patch.endpoint !== old.endpoint) ||
         (patch.token !== undefined && patch.token !== old.token) ||
@@ -219,6 +235,8 @@ export async function approveSources(doc, names = Object.keys(doc.sources)) {
     }
     for (const name of Object.keys(approved)) if (!Object.hasOwn(doc.sources, name)) delete approved[name];
     await chrome.storage.local.set({ approvedSources: approved, approvedConnectionId: settings.connectionId });
+    try { await chrome.runtime?.sendMessage?.({ type: "settings-saved" }); }
+    catch { /* The worker rebuilds schedules on its next evaluation. */ }
   });
 }
 export async function collectSourceCookies(spec) {
@@ -245,9 +263,11 @@ export async function collectSourceCookies(spec) {
   return cookies;
 }
 export function sourceApproved(settings, source, spec) {
+  const scope = value => Object.fromEntries(Object.entries(value || {}).filter(([key]) =>
+    !["stale_after_seconds", "validation_ttl_seconds"].includes(key)));
   return !!settings.connectionId && settings.approvedConnectionId === settings.connectionId &&
     Object.hasOwn(settings.approvedSources, source) &&
-    JSON.stringify(settings.approvedSources[source]) === JSON.stringify(spec);
+    JSON.stringify(scope(settings.approvedSources[source])) === JSON.stringify(scope(spec));
 }
 export async function pushSource(source, doc, settings) {
   const spec = doc.sources[source];

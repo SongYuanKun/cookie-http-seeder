@@ -31,3 +31,15 @@ jobs:
         run: npm test
       - name: Config sync check
         run: python scripts/sync_extension_sources.py --check
+      - name: Build client and Python package
+        if: matrix.python-version == '3.11'
+        run: |
+          python scripts/build_extension.py
+          python -m pip wheel . --no-deps --wheel-dir dist
+      - name: Upload versioned client
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cookie-http-seeder-extension
+          path: dist/cookie-http-seeder-extension-*.zip
+          if-no-files-found: error

@@ -45,7 +45,7 @@ class ReceiverClient:
         self.opener = build_opener(ProxyHandler({}), _NoRedirects())
 
     def request(self, path: str, *, payload: dict | None = None) -> dict:
-        allowed_path = r"/(?:v1/(?:status|sources|feedback)|v2/sync/[a-z][a-z0-9_-]{0,31})"
+        allowed_path = r"/(?:v1/(?:status|sources|senders|feedback)|v2/sync/[a-z][a-z0-9_-]{0,31})"
         if not re.fullmatch(allowed_path, path):
             raise ValueError("unsupported receiver path")
         if payload is not None and self.sender_tag != "default":

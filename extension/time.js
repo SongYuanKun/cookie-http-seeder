@@ -1,6 +1,7 @@
 /** Human display only. Storage, API payloads and retry deadlines stay unchanged. */
 const ISO_FIELDS = new Set(["updatedAt", "observedAt", "lastSeenAt", "checkedAt", "lastPushAt"]);
-const MS_FIELDS = new Set(["queuedAt", "nextAt", "lastAttemptAt", "lastSuccessAt", "nextAttemptAt"]);
+const MS_FIELDS = new Set(["queuedAt", "nextAt", "lastAttemptAt", "lastSuccessAt", "nextAttemptAt",
+  "probeAt", "lastProbeAt"]);
 const ISO_INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export function formatLocalTime(value) {

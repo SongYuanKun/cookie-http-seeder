@@ -3,7 +3,7 @@ import { formatLocalTime } from "./time.js";
 
 const PHASES = {
   pending: "等待同步", syncing: "正在同步", retrying: "等待重试", succeeded: "最近同步成功",
-  blocked: "需要处理", exhausted: "重试已耗尽", paused: "已暂停",
+  blocked: "需要处理", exhausted: "重试已耗尽", probing: "正在探测恢复", paused: "已暂停",
 };
 const FRESHNESS = { missing: "尚无快照", cleared: "快照已清空", unknown: "新鲜度未知",
   fresh: "最近收到快照", stale: "快照已过旧" };
@@ -25,6 +25,9 @@ export function sourceStatus(spec, {
     phase ? known(PHASES, phase, "未知状态") : "尚未推送"}`);
   if (job && typeof job.nextAt === "number" && ["pending", "retrying"].includes(phase)) {
     lines.push(`下次尝试：${formatLocalTime(job.nextAt)}`);
+  }
+  if (job && typeof job.probeAt === "number" && phase === "exhausted") {
+    lines.push(`恢复探测：${formatLocalTime(job.probeAt)}`);
   }
   let warning = !approved || permission !== true || !queueAvailable ||
     ["blocked", "exhausted"].includes(phase);

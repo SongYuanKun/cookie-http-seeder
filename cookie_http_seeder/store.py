@@ -26,6 +26,10 @@ __all__ = [
 ]
 
 
+class SnapshotUnavailable(ValueError):
+    """No versioned snapshot is available for a consumer request."""
+
+
 def _read_default_sources_text(*, data_dir: Path | None = None) -> str:
     env = os.environ.get(ENV_SOURCES, "").strip()
     if env:
@@ -150,6 +154,6 @@ def load_request_credentials(*, source: str, url: str, data_dir: Path | None = N
     doc = read_snapshot(source, data_dir=data_dir, sender_tag=sender_tag)
     if (not isinstance(doc, dict) or doc.get("schema_version") != 2
             or not doc.get("snapshot_version")):
-        raise ValueError("re-seed with extension 0.3+ before reporting feedback")
+        raise SnapshotUnavailable("re-seed with extension 0.3+ before reporting feedback")
     return {"cookie_header": cookies_to_header(doc["cookies"], url, domains=doc["domains"]),
             "snapshot_version": doc["snapshot_version"]}

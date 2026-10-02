@@ -15,6 +15,7 @@ small,.hint{color:#536575}table{border-collapse:collapse;width:100%;font-size:14
 .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}@media(max-width:700px){.two{display:block}}
 </style></head><body><main>
 <h1>Cookie HTTP Seeder</h1>
+<p id="client-version" class="hint"></p>
 <p class="hint">只同步明确授权的非分区 Cookie；不读取 localStorage，不自动登录，登录有效性由爬虫反馈，不主动请求目标网站。</p>
 <section><h2>1. 连接接收端</h2>
 <form id="connection-form">
@@ -24,6 +25,11 @@ small,.hint{color:#536575}table{border-collapse:collapse;width:100%;font-size:14
 <div class="two"><label>Token<input id="token" type="password" required autocomplete="off"></label>
 <label>定时推送（分钟；0 关闭，启用至少 15）<input id="autoPushMinutes" type="number" min="0" max="10080" step="1" value="0" required></label></div>
 <label><input id="syncOnChange" type="checkbox"> Cookie 变化后自动同步（默认关闭，约 30 秒合并窗口）</label>
+<div class="two">
+<label>故障耗尽后恢复探测（分钟；0 关闭，至少 15）<input id="recoveryProbeMinutes" type="number" min="0" max="10080" step="1" value="0" required></label>
+<label>登录 / 未同步提醒检查（分钟；0 关闭，至少 15）<input id="loginPollMinutes" type="number" min="0" max="10080" step="1" value="0" required></label>
+</div>
+<small>恢复探测只处理临时故障，每次最多尝试一次；鉴权、配置与授权错误仍需人工修复。提醒只查询接收端状态，不访问目标网站。</small>
 <button class="primary" type="submit">保存连接并加载配置</button><button id="reload" type="button">重新加载配置</button>
 </form><small>远程必须 HTTPS；HTTP 仅限 localhost / 127.0.0.1，可通过 SSH 转发。更换地址或 Token 后需重新授权来源。</small></section>
 <pre id="status" role="status" aria-live="polite">请配置连接。</pre>
@@ -40,10 +46,18 @@ small,.hint{color:#536575}table{border-collapse:collapse;width:100%;font-size:14
 <small>包含这些域名及子域名。需要父域 Cookie 时显式加入父域；不要加入公共后缀。国际化域名使用 punycode。</small>
 <label>固定输出目标 URL<input id="source-url" required type="url" placeholder="https://example.com/account"></label>
 <label><input id="source-enabled" type="checkbox" checked> 启用同步</label>
+<div class="two">
+<label>未同步阈值（秒；默认 86400）<input id="source-stale" type="number" min="60" max="2592000" step="1" value="86400" required></label>
+<label>登录反馈有效期（秒；默认 86400）<input id="source-ttl" type="number" min="60" max="2592000" step="1" value="86400" required></label>
+</div>
+<small>阈值需要接收端 0.4+。仅修改阈值保留已有快照；反馈有效期不代表网站会话的真实有效期。</small>
 <button class="primary" type="submit">保存并授权此来源</button><button type="reset">取消编辑 / 新建</button></form></section>
 <section><h2>3. 同步状态与诊断</h2>
 <p class="hint">传输状态、数据新鲜度、爬虫反馈分别展示。最多尝试 5 次；鉴权/授权错误需手动修复后再推送。队列不保存 Cookie。</p>
 <button id="diagnose" type="button">检查连接和同步状态</button><pre id="diagnostics" role="status"></pre></section>
+<section><h2>所有发送端概览</h2>
+<p class="hint">只显示状态元数据。爬虫仍须明确选择标签；本页不会切换账号、合并 Cookie 或自动选取其他发送端。</p>
+<button id="refresh-senders" type="button">刷新所有发送端</button><pre id="sender-summary" role="status">尚未查询</pre></section>
 <section><h2>4. 配置导入 / 导出</h2>
 <p class="hint">只包含网站配置，不包含接收端地址、Token 或 Cookie。导入为全量替换，会清空被删除或修改来源的旧快照。目标 URL 请勿包含秘密。</p>
 <button id="export" type="button">导出网站配置</button><label>选择配置文件<input id="import-file" type="file" accept=".json,application/json"></label>

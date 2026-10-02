@@ -86,3 +86,20 @@ def test_sender_and_source_policy_and_pause_invalidation(endpoint):
     assert request("PUT", "/v1/sources", update)[0] == 200
     assert not (root / "site-session.json").exists()
     assert request("GET", "/v3/session-bundles/site")[1]["bundle_version"] is None
+
+
+def test_monitoring_capabilities_and_threshold_edit_preserve_bundle(endpoint):
+    request, root = endpoint
+    config = request("GET", "/v1/sources")[1]
+    assert {"source_thresholds", "sender_status_summary", "stale_notifications",
+            "encrypted_session_bundles"} <= set(config["capabilities"])
+    code, uploaded = upload(request)
+    assert code == 200
+    sources = config["sources"]
+    sources["site"].update(stale_after_seconds=300, validation_ttl_seconds=600)
+    code, updated = request("PUT", "/v1/sources",
+                            {"sources": sources, "revision": config["revision"]})
+    assert code == 200 and updated["revision"] != config["revision"]
+    assert (root / "site-session.json").exists()
+    assert request("GET", "/v3/session-bundles/site")[1]["bundle_version"] == uploaded[
+        "bundle_version"]

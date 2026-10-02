@@ -55,6 +55,8 @@ def _build_parser() -> argparse.ArgumentParser:
     need.add_argument("--reason", default="cookies need refresh")
     need.add_argument("--webhook-file", type=Path, default=None)
     status = sub.add_parser("status", help="local cookie file status, not login validity")
+    status.add_argument("--all-senders", action="store_true",
+                        help="summarize metadata for all initialized sender labels")
     status.add_argument("--token", default="")  # legacy CLI compatibility; local read only
     status.add_argument("--token-file", type=Path, default=None)
     header = sub.add_parser("header", help="print a URL-scoped Cookie header (sensitive)")
@@ -102,6 +104,14 @@ def main(argv: list[str] | None = None) -> int:
     data_dir = args.data_dir or default_data_dir()
     if args.command == "senders":
         print(json.dumps({"senders": list_sender_tags(data_dir)}, indent=2))
+        return 0
+    if args.command == "status" and args.all_senders:
+        if args.sender_tag != "default":
+            raise SystemExit("--all-senders cannot be combined with --sender-tag")
+        state = ReceiverState(load_sources(args.sources, data_dir=data_dir), data_dir, args.sources)
+        doc = state.sender_statuses()
+        print(json.dumps(doc if args.raw_json else display_times(doc),
+                         ensure_ascii=False, indent=2))
         return 0
     if args.command == "status" and args.sender_tag != "default":
         selected = sender_directory(data_dir, args.sender_tag)

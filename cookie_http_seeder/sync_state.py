@@ -136,7 +136,8 @@ class SyncState:
             doc = save_snapshot(jar, source=source, spec=spec, updated_at=utc_at(now),
                                 data_dir=self.data_dir, request_id=request_id)
         if meta.get("snapshotVersion") != doc["snapshot_version"]:
-            meta = {"lastNotifyAt": meta.get("lastNotifyAt")}
+            meta = {"lastNotifyAt": meta.get("lastNotifyAt"),
+                    "lastStaleNotifyAt": meta.get("lastStaleNotifyAt")}
         meta.update({"snapshotVersion": doc["snapshot_version"], "lastSeen": now,
                      "lastRequestId": request_id})
         self._write_meta(source, meta)
@@ -167,7 +168,8 @@ class SyncState:
         now = self.clock()
         meta = self._meta(source)
         if meta.get("snapshotVersion") != version:
-            meta = {"lastNotifyAt": meta.get("lastNotifyAt")}
+            meta = {"lastNotifyAt": meta.get("lastNotifyAt"),
+                    "lastStaleNotifyAt": meta.get("lastStaleNotifyAt")}
         meta.update({"snapshotVersion": version, "validation": result,
                      "reasonCode": reason, "checkedAt": now})
         last_notify = meta.get("lastNotifyAt")
@@ -181,7 +183,20 @@ class SyncState:
                  "validation": result, "checkedAt": utc_at(now),
                  "notificationScheduled": should_notify}, should_notify)
 
-    def status(self, source: str, *, stale_after: int = 86400) -> dict[str, Any]:
+    def reserve_stale_notification(self, source: str, *, cooldown: int = 900) -> bool:
+        """Caller checks stale/enabled under its lock before reserving a notification."""
+        now = self.clock()
+        meta = self._meta(source)
+        last = meta.get("lastStaleNotifyAt")
+        if type(last) in {int, float} and now - last < cooldown:
+            return False
+        meta["lastStaleNotifyAt"] = now
+        self._write_meta(source, meta)
+        return True
+
+    def status(self, source: str, *, stale_after: int = 86400,
+               validation_ttl: int | None = None) -> dict[str, Any]:
+        validation_ttl = stale_after if validation_ttl is None else validation_ttl
         now = self.clock()
         doc = read_snapshot(source, data_dir=self.data_dir)
         doc = doc if isinstance(doc, dict) and doc.get("schema_version") == 2 else {}
@@ -200,10 +215,11 @@ class SyncState:
         if reason not in RESULT_REASONS.get(result, set()):
             reason = None
         effective = "expired" if result != "unverified" and (
-            checked_age is None or checked_age > stale_after) else result
+            checked_age is None or checked_age > validation_ttl) else result
         return {"snapshot_version": version,
                 "lastSeenAt": utc_at(seen) if age is not None else None,
                 "ageSeconds": age, "freshness": freshness, "staleAfterSeconds": stale_after,
+                "validationTtlSeconds": validation_ttl,
                 "validation": effective, "validationDetail": {
                     "reportedResult": result, "reasonCode": reason,
                     "ageSeconds": checked_age,

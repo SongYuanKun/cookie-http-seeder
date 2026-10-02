@@ -1,7 +1,9 @@
 import { loadSettings } from "./shared.js";
 import { RETRY_ALARM, SyncEngine } from "./sync.js";
+import { LOGIN_ALARM, LoginMonitor } from "./login_monitor.js";
 const AUTO_ALARM = "cookie-http-seeder-auto-push";
 const engine = new SyncEngine();
+const loginMonitor = new LoginMonitor();
 
 async function syncAlarm() {
   const settings = await loadSettings();
@@ -38,7 +40,9 @@ async function publish(result, manual = false) {
   } catch { /* Notification availability must not affect sync. */ }
 }
 async function handle(message) {
-  if (message.type === "settings-saved") { await syncAlarm(); await engine.recover(); return { ok: true }; }
+  if (message.type === "settings-saved") {
+    await syncAlarm(); await engine.recover(); await loginMonitor.recover(); return { ok: true };
+  }
   if (message.type === "sync-status") return { ok: true, queue: await engine.status() };
   await engine.enqueue(message.source ? [message.source] : null, "manual");
   const result = await engine.runDue(); await publish(result, true); return result;
@@ -51,6 +55,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 chrome.cookies.onChanged.addListener(info => { engine.changed(info).catch(() => {}); });
 chrome.alarms.onAlarm.addListener(alarm => {
   (async () => {
+    if (alarm.name === LOGIN_ALARM) { await loginMonitor.check(); return; }
     if (alarm.name === AUTO_ALARM) await engine.enqueue(null, "periodic");
     else if (alarm.name !== RETRY_ALARM) return;
     const result = await engine.runDue(); await publish(result);
@@ -58,7 +63,7 @@ chrome.alarms.onAlarm.addListener(alarm => {
 });
 async function startup() {
   await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
-  await engine.recover(); await syncAlarm(); await badge();
+  await engine.recover(); await syncAlarm(); await loginMonitor.recover(); await badge();
 }
 chrome.runtime.onInstalled.addListener(() => { startup().catch(() => {}); });
 chrome.runtime.onStartup.addListener(() => { startup().catch(() => {}); });
