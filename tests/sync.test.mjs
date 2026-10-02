@@ -85,6 +85,87 @@ test("manual retry explicitly resets exhausted budget", async () => {
   await engine.enqueue(null, "manual"); assert.equal(job().attempts, 0);
   await engine.runDue(); assert.equal(job().phase, "succeeded");
 });
+
+async function exhaustWithRecovery() {
+  settings.recoveryProbeMinutes = 15;
+  perform = async () => { throw new ReceiverError("network_error", "offline", { retryable: true }); };
+  await engine.enqueue();
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    await engine.runDue(); clock = job().nextAt ?? clock;
+  }
+  assert.equal(job().phase, "exhausted");
+  assert.ok(Number.isFinite(job().probeAt), "opt-in recovery must persist a probe deadline");
+}
+test("opt-in exhausted recovery waits for a persisted low-frequency deadline", async () => {
+  await exhaustWithRecovery();
+  const deadline = job().probeAt;
+  assert.equal(deadline, clock + 900_000);
+  assert.equal(alarms.get(RETRY_ALARM).scheduledTime, deadline);
+  await engine.enqueue(null, "change"); await engine.enqueue(null, "periodic");
+  assert.equal(job().probeAt, deadline);
+  await engine.runDue(); assert.equal(calls.length, 5);
+  clock = deadline;
+  perform = async () => ({ ok: true, cookieCount: 2 });
+  await engine.runDue();
+  assert.equal(calls.length, 6); assert.equal(job().phase, "succeeded");
+  assert.equal(job().probeAt, null);
+});
+test("failed recovery performs one attempt rather than replenishing five retries", async () => {
+  await exhaustWithRecovery(); clock = job().probeAt;
+  await engine.runDue();
+  assert.equal(calls.length, 6); assert.equal(job().attempts, 5);
+  assert.equal(job().phase, "exhausted"); assert.equal(job().probeAt, clock + 900_000);
+  await engine.runDue(); assert.equal(calls.length, 6);
+});
+test("receiver preflight failure backs off without collecting any cookies", async () => {
+  await exhaustWithRecovery(); clock = job().probeAt;
+  engine.getSources = async () => { throw new ReceiverError("network_error", "offline", { retryable: true }); };
+  await engine.runDue(); assert.equal(calls.length, 5);
+  assert.equal(job().phase, "exhausted"); assert.equal(job().probeAt, clock + 900_000);
+});
+test("auth error during recovery blocks and cancels future probes", async () => {
+  await exhaustWithRecovery(); clock = job().probeAt;
+  engine.getSources = async () => { throw new ReceiverError("unauthorized", "rejected"); };
+  await engine.runDue(); assert.equal(calls.length, 5);
+  assert.equal(job().phase, "blocked"); assert.equal(job().probeAt, null);
+  assert.equal(alarms.has(RETRY_ALARM), false);
+});
+test("worker restart preserves cooldown for an interrupted recovery probe", async () => {
+  await exhaustWithRecovery();
+  clock = job().probeAt;
+  Object.assign(storage[QUEUE_KEY].jobs.site, { phase: "probing", lastProbeAt: clock,
+    probeAt: clock + 900_000 });
+  engine = makeEngine(); await engine.recover();
+  assert.equal(job().phase, "exhausted"); assert.equal(job().probeAt, clock + 900_000);
+  await engine.runDue(); assert.equal(calls.length, 5);
+});
+test("disabling recovery cancels the stored probe before collection", async () => {
+  await exhaustWithRecovery(); clock = job().probeAt;
+  settings.recoveryProbeMinutes = 0;
+  await engine.recover(); await engine.runDue();
+  assert.equal(calls.length, 5); assert.equal(job().probeAt, null);
+  assert.equal(alarms.has(RETRY_ALARM), false);
+});
+test("revoked approval cancels recovery without reintroducing a queue job", async () => {
+  await exhaustWithRecovery(); clock = job().probeAt;
+  settings.approvedSources = {};
+  await engine.recover(); await engine.runDue();
+  assert.equal(calls.length, 5); assert.equal(job(), undefined);
+});
+test("revocation during preflight prevents recovery push", async () => {
+  await exhaustWithRecovery(); clock = job().probeAt;
+  engine.getSources = async () => {
+    settings.approvedSources = {};
+    return { sources: structuredClone(sources), revision: "r" };
+  };
+  await engine.runDue(); assert.equal(calls.length, 5);
+});
+test("temporary recovery respects retry-after longer than configured interval", async () => {
+  await exhaustWithRecovery(); clock = job().probeAt;
+  perform = async () => { throw new ReceiverError("server_unavailable", "busy",
+    { retryable: true, retryAfterMs: 3_600_000 }); };
+  await engine.runDue(); assert.equal(job().probeAt, clock + 3_600_000);
+});
 test("auth error blocks rather than retries", async () => {
   perform = async () => { throw new ReceiverError("unauthorized", "Token rejected"); };
   await engine.enqueue(); await engine.runDue();
