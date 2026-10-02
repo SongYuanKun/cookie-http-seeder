@@ -235,6 +235,8 @@ export async function approveSources(doc, names = Object.keys(doc.sources)) {
     }
     for (const name of Object.keys(approved)) if (!Object.hasOwn(doc.sources, name)) delete approved[name];
     await chrome.storage.local.set({ approvedSources: approved, approvedConnectionId: settings.connectionId });
+    try { await chrome.runtime?.sendMessage?.({ type: "settings-saved" }); }
+    catch { /* The worker rebuilds schedules on its next evaluation. */ }
   });
 }
 export async function collectSourceCookies(spec) {

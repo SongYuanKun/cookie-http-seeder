@@ -4,6 +4,7 @@ import {
 } from "./shared.js";
 import { cachedSourceDocument, revokeLocalSource } from "./access.js";
 import { sourceStatus } from "./source_status.js";
+import { senderSummary } from "./sender_summary.js";
 import { displayTimes, formatLocalTime, localTimeZone } from "./time.js";
 const $ = id => document.getElementById(id);
 let doc = null, connection = null, imported = null, busy = false;
@@ -28,6 +29,7 @@ function originsFor(sources) { return [...new Set(Object.values(sources).filter(
 function wrapped(result) { return { ...result, sources: normalizeSources(result.sources), connectionId: connection.connectionId }; }
 async function reload() {
   doc = null; statusCells.clear(); $("sources").replaceChildren();
+  $("sender-summary").textContent = "尚未查询";
   connection = await loadSettings();
   try { doc = await fetchSources(connection); }
   catch (error) {
@@ -60,6 +62,9 @@ function button(text, fn) {
   return button;
 }
 function render() {
+  const supportsThresholds = doc.capabilities?.includes("source_thresholds") === true;
+  $("source-stale").disabled = !supportsThresholds;
+  $("source-ttl").disabled = !supportsThresholds;
   $("sender-context").textContent = `当前发送端标签：${connection.senderTag || "default"}。本页配置、快照与状态均属于此标签。`;
   statusCells.clear();
   $("sources").replaceChildren();
@@ -76,6 +81,8 @@ function render() {
         $("source-name").value = name; $("source-name").readOnly = true;
         $("source-label").value = spec.label; $("source-domains").value = spec.domains.join("\n");
         $("source-url").value = spec.target_url; $("source-enabled").checked = spec.enabled;
+        $("source-stale").value = spec.stale_after_seconds ?? 86400;
+        $("source-ttl").value = spec.validation_ttl_seconds ?? 86400;
       }),
       button("仅授权此来源", async () => {
         requireDoc();
@@ -124,7 +131,10 @@ function render() {
 }
 $("connection-form").addEventListener("submit", action(async () => {
   const endpoint = endpointURL($("endpoint").value.trim());
-  const patch = { endpoint, senderTag: $("sender-tag").value.trim(), token: $("token").value.trim(), autoPushMinutes: Number($("autoPushMinutes").value), syncOnChange: $("syncOnChange").checked };
+  const patch = { endpoint, senderTag: $("sender-tag").value.trim(), token: $("token").value.trim(),
+    autoPushMinutes: Number($("autoPushMinutes").value), syncOnChange: $("syncOnChange").checked,
+    recoveryProbeMinutes: Number($("recoveryProbeMinutes").value),
+    loginPollMinutes: Number($("loginPollMinutes").value) };
   const origins = [`${new URL(endpoint).protocol}//${new URL(endpoint).hostname}/*`];
   if (!await chrome.permissions.request({ origins })) throw new Error("未授权接收端地址");
   await saveSettings(patch);
@@ -142,9 +152,13 @@ $("push-all").addEventListener("click", action(() => push()));
 $("source-form").addEventListener("reset", () => { $("source-name").readOnly = false; });
 $("source-form").addEventListener("submit", action(async () => {
   requireDoc(); const name = $("source-name").value.trim();
+  const thresholds = doc.capabilities?.includes("source_thresholds") ? {
+    stale_after_seconds: Number($("source-stale").value),
+    validation_ttl_seconds: Number($("source-ttl").value),
+  } : {};
   const sources = normalizeSources({ ...doc.sources, [name]: {
     label: $("source-label").value.trim(), domains: $("source-domains").value.split(/[,\s]+/).filter(Boolean),
-    target_url: $("source-url").value.trim(), enabled: $("source-enabled").checked,
+    target_url: $("source-url").value.trim(), enabled: $("source-enabled").checked, ...thresholds,
   } });
   const origins = sources[name].enabled ? sourceOrigins(sources[name]) : [];
   if (origins.length && !await chrome.permissions.request({ origins })) throw new Error("网站权限未授予，配置未保存");
@@ -176,6 +190,9 @@ loadSettings().then(settings => {
   $("sender-tag").value = settings.senderTag;
   $("endpoint").value = settings.endpoint; $("token").value = settings.token;
   $("autoPushMinutes").value = settings.autoPushMinutes;
+  $("recoveryProbeMinutes").value = settings.recoveryProbeMinutes;
+  $("loginPollMinutes").value = settings.loginPollMinutes;
+  $("client-version").textContent = `插件客户端版本：${chrome.runtime.getManifest().version}`;
   $("syncOnChange").checked = settings.syncOnChange;
   if (settings.token && settings.connectionId) return reload();
 }).catch(error => show(error.message, true));
@@ -245,3 +262,19 @@ async function refreshStatuses() {
   $("status-updated").textContent = `状态查询时间：${formatLocalTime(Date.now())}（${localTimeZone()}）。登录有效性仅代表爬虫最近一次报告。`;
 }
 $("refresh-sources").addEventListener("click", action(refreshStatuses));
+$("refresh-senders").addEventListener("click", action(async () => {
+  await checkConnection();
+  if (!doc.capabilities?.includes("sender_status_summary")) throw new Error("请升级接收端以查看全标签状态");
+  $("sender-summary").textContent = "正在查询…";
+  try {
+    const selected = await loadSettings();
+    const summary = await receiverRequest(selected, "/v1/senders");
+    if ((await loadSettings()).connectionId !== selected.connectionId) {
+      throw new Error("连接已变更，请重新加载配置");
+    }
+    $("sender-summary").textContent = senderSummary(summary);
+  } catch (error) {
+    $("sender-summary").textContent = "接收端状态不可用，请检查连接";
+    throw error;
+  }
+}));
