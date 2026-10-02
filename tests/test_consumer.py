@@ -315,3 +315,20 @@ def test_snapshot_read_failure_after_invalid_response_keeps_durable_pause(setup,
     assert consumer._load()["blocked_version"] == version
     with pytest.raises(LoginRequired):
         consumer.request("https://example.test/me", lambda *_: pytest.fail("must remain paused"))
+
+
+@pytest.mark.parametrize("field", ["blocked_version", "pending_feedback"])
+def test_numeric_snapshot_version_in_consumer_state_fails_closed(setup, field):
+    state, _, consumer = setup
+    seed(state)
+    saved = consumer._load()
+    numeric_version = int("1" * 32)
+    if field == "blocked_version":
+        saved[field] = numeric_version
+    else:
+        saved[field] = {"source": "site", "snapshot_version": numeric_version,
+                        "result": "invalid", "reason_code": "login_required"}
+    consumer.state_path.parent.mkdir(parents=True, exist_ok=True)
+    consumer.state_path.write_text(json.dumps(saved))
+    with pytest.raises(ValueError):
+        consumer.request("https://example.test/me", lambda *_: pytest.fail("must not send"))

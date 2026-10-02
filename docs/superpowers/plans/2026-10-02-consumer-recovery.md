@@ -66,7 +66,7 @@
 **Files:** metadata 0.4.0, README/CHANGELOG/protocol/deploy/examples, upgrade handoff, packaging check.
 - [x] Update accurate feature/compatibility documentation and client version display.
 - [x] Run full Python and Node suites, Ruff, source sync check and isolated package/extension artifact validation.
-- [ ] One independent whole-branch review; fix concrete findings with regression tests.
+- [x] One independent whole-branch review; fix concrete findings with regression tests.
 - [ ] Commit, fetch latest main, integrate without force and push; verify remote SHA and CI.
 - [ ] Send grok bot the exact update task after identity is verified; verify target client's 0.4.0 version and preserve connection/consent.
 
@@ -77,3 +77,5 @@
 - Ruff and source sync check passed; deterministic extension ZIP and Python wheel build passed; extracted wheel imported 0.4.0 and bundled sources outside the checkout.
 - Isolated Chromium/profile with synthetic local receiver: 0.4.0 loaded, connection save and sender summary worked, source thresholds 300/600 matched, real login and retry alarms created, no page errors.
 - This is isolated browser evidence; the user's installed client and actual site response adapters still require target identity/site evidence.
+
+- Independent review found numeric snapshot versions accepted in state; strict string checks added, both regression cases reproduced then passed. Consumer suite: 37 passed; Ruff passed.

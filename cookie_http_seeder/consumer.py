@@ -211,7 +211,8 @@ class CookieConsumer:
                 or state.get("schema_version") != 1
                 or state.get("identity") != self.identity
                 or (state.get("blocked_version") is not None
-                    and not VERSION.fullmatch(str(state["blocked_version"])))
+                    and (not isinstance(state["blocked_version"], str)
+                         or not VERSION.fullmatch(state["blocked_version"])))
                 or type(state.get("feedback_attempts")) is not int
                 or not 0 <= state["feedback_attempts"] <= MAX_FEEDBACK_ATTEMPTS):
             raise ValueError("invalid consumer state")
@@ -220,7 +221,8 @@ class CookieConsumer:
             if (not isinstance(pending, dict)
                     or set(pending) != {"source", "snapshot_version", "result", "reason_code"}
                     or pending["source"] != self.source
-                    or not VERSION.fullmatch(str(pending["snapshot_version"]))):
+                    or not isinstance(pending["snapshot_version"], str)
+                    or not VERSION.fullmatch(pending["snapshot_version"])):
                 raise ValueError("invalid pending feedback")
             Observation(pending["result"], pending["reason_code"])
         return state
