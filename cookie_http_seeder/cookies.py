@@ -78,7 +78,9 @@ def normalize_sources(raw: object) -> dict[str, dict[str, Any]]:
     for name, spec in raw.items():
         if not isinstance(name, str) or not SOURCE_NAME.fullmatch(name):
             raise ValueError("invalid source name")
-        if not isinstance(spec, dict) or set(spec) - {"domains", "label", "target_url", "enabled"}:
+        threshold_fields = {"stale_after_seconds", "validation_ttl_seconds"}
+        if (not isinstance(spec, dict)
+                or set(spec) - {"domains", "label", "target_url", "enabled"} - threshold_fields):
             raise ValueError("invalid source fields; do not import credentials")
         values = spec.get("domains")
         if not isinstance(values, list) or not 1 <= len(values) <= 32:
@@ -98,6 +100,12 @@ def normalize_sources(raw: object) -> dict[str, dict[str, Any]]:
         result[name] = {
             "label": label, "domains": domains, "target_url": target, "enabled": enabled
         }
+        for field in threshold_fields:
+            if field in spec:
+                value = spec[field]
+                if type(value) is not int or not 60 <= value <= 2592000:
+                    raise ValueError("source thresholds must be 60-2592000 integer seconds")
+                result[name][field] = value
     return result
 
 

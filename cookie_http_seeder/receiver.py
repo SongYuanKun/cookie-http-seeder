@@ -87,7 +87,7 @@ class ReceiverState:
         self.notification_dir = self.data_dir
         self._senders: dict[str, ReceiverState] = {}
 
-    def for_sender(self, tag: str) -> ReceiverState:
+    def for_sender(self, tag: str, *, create: bool = True) -> ReceiverState:
         """One independently locked state/configuration per storage label."""
         tag = sender_tag(tag)
         if tag == "default":
@@ -103,6 +103,8 @@ class ReceiverState:
             if config.is_file():
                 sources = load_sources(config)
             else:
+                if not create:
+                    raise ValueError("sender is not initialized")
                 existing = set(list_sender_tags(self.data_dir)) | set(self._senders)
                 if len(existing - {"default"}) >= MAX_SENDERS:
                     raise ValueError("sender namespace limit reached")
@@ -123,7 +125,9 @@ class ReceiverState:
             return {"ok": True, "schema_version": 1, "protocol_version": 2,
                     "sources": json.loads(json.dumps(self.sources)), "revision": self.revision,
                     "sender_tag": self.sender_tag,
-                    "capabilities": ["conditional_snapshots", "validation_feedback", "sender_tags"]}
+                    "capabilities": ["conditional_snapshots", "validation_feedback", "sender_tags",
+                                     "source_thresholds", "sender_status_summary",
+                                     "stale_notifications"]}
 
     def check_revision(self, revision: object) -> None:
         if not isinstance(revision, str) or revision != self.revision:
@@ -136,7 +140,12 @@ class ReceiverState:
             # Invalidate old credentials before publishing a narrower/new policy.
             # Each file write is atomic; this is not a multi-file database transaction.
             for name, old in self.sources.items():
-                if sources.get(name) != old:
+                thresholds = {"stale_after_seconds", "validation_ttl_seconds"}
+                previous = {k: v for k, v in old.items() if k not in thresholds}
+                replacement = sources.get(name)
+                updated = ({k: v for k, v in replacement.items() if k not in thresholds}
+                           if replacement is not None else None)
+                if updated != previous:
                     save_snapshot([], source=name, spec=old, updated_at=_utc_now(),
                                   data_dir=self.data_dir)
             atomic_write_text(self.sources_path,
@@ -240,7 +249,9 @@ class ReceiverState:
                 except (OSError, ValueError, TypeError):
                     entry = {"present": False, "error": "unreadable_snapshot"}
                 try:
-                    sync = self.sync.status(name)
+                    sync = self.sync.status(
+                        name, stale_after=spec.get("stale_after_seconds", 86400),
+                        validation_ttl=spec.get("validation_ttl_seconds", 86400))
                 except (OSError, ValueError, TypeError, OverflowError):
                     sync = {"validation": "unverified", "freshness": "unknown",
                             "syncError": "unreadable_sync_state"}
@@ -248,6 +259,21 @@ class ReceiverState:
             return {"ok": True, "sender_tag": self.sender_tag,
                     "sources": sources, "config_revision": self.revision,
                     "observedAt": _utc_now()}
+
+    def initialized_states(self):
+        """Enumerate existing labels only; one corrupt label does not hide the others."""
+        for tag in list_sender_tags(self.data_dir):
+            try:
+                yield tag, self.for_sender(tag, create=False)
+            except (OSError, ValueError, TypeError):
+                yield tag, None
+
+    def sender_statuses(self) -> dict[str, Any]:
+        summaries = {}
+        for tag, state in self.initialized_states():
+            summaries[tag] = (state.status() if state is not None else
+                              {"ok": False, "error": "unreadable_sender_state"})
+        return {"ok": True, "senders": summaries, "observedAt": _utc_now()}
 
 
 _STATE: ReceiverState | None = None
@@ -389,6 +415,12 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
             if self.path == "/healthz":
                 self._send(200, {"status": "ok"})
             elif self._authorize():
+                if self.path == "/v1/senders":
+                    try:
+                        self._send(200, root_state.sender_statuses())
+                    except (OSError, ValueError, TypeError):
+                        self._send(500, {"ok": False, "error": "unreadable_sender_state"})
+                    return
                 try:
                     state = root_state.for_sender(self.sender_tag)
                 except (ValueError, OSError, TypeError):
@@ -494,6 +526,8 @@ def _serve(*, host: str, port: int, token: str, notify: bool = False) -> None:
     server.daemon_threads = False
     server.block_on_close = True
     server.timeout = 30
+    from .monitoring import StaleMonitor
+    monitor = StaleMonitor(_state(), enabled=notify)
     try:
         server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
     except OSError:
@@ -504,8 +538,10 @@ def _serve(*, host: str, port: int, token: str, notify: bool = False) -> None:
         flush=True,
     )
     try:
+        monitor.start()
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        monitor.stop()
         server.server_close()
