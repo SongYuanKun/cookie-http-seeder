@@ -79,3 +79,5 @@
 - This is isolated browser evidence; the user's installed client and actual site response adapters still require target identity/site evidence.
 
 - Independent review found numeric snapshot versions accepted in state; strict string checks added, both regression cases reproduced then passed. Consumer suite: 37 passed; Ruff passed.
+
+- First main CI exposed direct-pytest script import failure (local python -m pytest had passed). Reproduced with the CI entrypoint; test loads the builder by explicit path now. Direct pytest full suite: 282 passed (27.63 s), Ruff passed. Main client ZIP SHA256 remains f6758efb4c63310e6c3064b0d90c2384cef4ddbefc706151e15ec954bb43c4c2.

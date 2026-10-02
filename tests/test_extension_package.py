@@ -1,6 +1,7 @@
 """The distributable client contains its complete module graph and no loose data."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import shutil
 import tomllib
@@ -10,9 +11,14 @@ from pathlib import Path
 import pytest
 
 from cookie_http_seeder import __version__
-from scripts.build_extension import build_extension
 
 ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location(
+    "extension_builder", ROOT / "scripts/build_extension.py")
+assert SPEC is not None and SPEC.loader is not None
+BUILDER = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(BUILDER)
+build_extension = BUILDER.build_extension
 
 
 def test_build_complete_versioned_client_without_extra_sensitive_files(tmp_path):
