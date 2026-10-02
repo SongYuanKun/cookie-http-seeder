@@ -11,6 +11,8 @@ from pathlib import Path
 
 _IMPORT = re.compile(r'''(?:from\s+|import\s*)["'](\.[^"']+)["']''')
 _SCRIPT = re.compile(r'''<script\b[^>]*\bsrc=["']([^"']+)["']''', re.IGNORECASE)
+# Extension pages opened with a literal path can have a dynamic query string.
+_RUNTIME_PAGE = re.compile(r'''chrome\.runtime\.getURL\(\s*["'`]([^"'`?$]+\.html)(?=["'`?])''')
 
 
 def build_extension(source_dir: Path, output_dir: Path) -> Path:
@@ -45,6 +47,7 @@ def build_extension(source_dir: Path, output_dir: Path) -> Path:
         elif path.suffix == ".js":
             pending.extend((Path(name).parent / p).as_posix()
                            for p in _IMPORT.findall(content.decode("utf-8")))
+            pending.extend(_RUNTIME_PAGE.findall(content.decode("utf-8")))
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / f"cookie-http-seeder-extension-{version}.zip"
     temporary = target.with_suffix(".zip.tmp")

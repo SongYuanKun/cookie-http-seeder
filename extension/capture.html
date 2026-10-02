@@ -1,0 +1,12 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><title>采集可迁移会话包</title>
+<style>body{max-width:720px;margin:30px auto;padding:0 18px;font:15px/1.6 system-ui;color:#182635}label{display:block;margin:12px 0}input,select{display:block;width:100%;box-sizing:border-box;padding:8px}button{padding:9px 16px}#status{white-space:pre-wrap;overflow-wrap:anywhere}.error{color:#a42323}</style>
+</head><body><h1>采集可迁移会话包</h1>
+<p>选择已批准的网站和来源标签。点击开始会重新加载原网站标签，只捕获这次顶层 GET/HEAD 页面请求。未提交的表单内容可能丢失，请先保存。</p>
+<label>来源网站<select id="source"></select></label>
+<label>城市（可选，手工标注）<input id="city" autocomplete="off" maxlength="80"></label>
+<label>区县（可选，手工标注）<input id="district" autocomplete="off" maxlength="80"></label>
+<label>会话包口令（至少 12 字符，只在本页内存使用）<input id="passphrase" type="password" autocomplete="new-password"></label>
+<button id="start">重新加载选中标签并采集</button>
+<p id="status" role="status" aria-live="polite">正在加载来源…</p>
+<p>接收端只保存密文和元数据。源站出口 IP、设备绑定凭据、IndexedDB 等无法复制；导入后仍可能需要重新登录。</p>
+<script type="module" src="capture.js"></script></body></html>

@@ -74,6 +74,14 @@ def _build_parser() -> argparse.ArgumentParser:
     report.add_argument("--reason-code", required=True)
     report.add_argument("--endpoint", default="http://127.0.0.1:18765")
     report.add_argument("--token-file", type=Path, default=None)
+    session = sub.add_parser("session-import",
+                             help="import an encrypted bundle into a new Chrome profile")
+    session.add_argument("source")
+    session.add_argument("--bundle", type=Path, required=True)
+    session.add_argument("--profile", type=Path, required=True)
+    session.add_argument("--passphrase-file", type=Path, required=True)
+    session.add_argument("--open-url", default=None)
+    session.add_argument("--sender-tag", type=sender_tag, default="default")
     for command in (status, doctor, report, header):
         command.add_argument("--sender-tag", type=sender_tag, default="default",
                              help="select one sender label; default keeps legacy storage")
@@ -138,6 +146,22 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(json.dumps(result if args.raw_json else display_times(result),
                          ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "session-import":
+        from .session_import import import_into_profile, prepare_import, read_passphrase
+        try:
+            selected = sender_directory(data_dir, args.sender_tag)
+            source_config = args.sources or (selected / "sources.json")
+            sources = load_sources(source_config, data_dir=selected)
+            prepared = prepare_import(args.source, args.bundle, sources,
+                                      read_passphrase(args.passphrase_file), args.profile)
+            result = import_into_profile(prepared, args.profile, open_url=args.open_url,
+                                         hold=bool(args.open_url))
+        except Exception:  # noqa: BLE001 - browser errors may contain sensitive URLs or state
+            print(json.dumps({"ok": False, "error": "session_import_failed",
+                              "reason": "check_bundle_passphrase_scope_and_new_profile"}))
+            return 1
+        print(json.dumps(result, ensure_ascii=False))
         return 0
     data_dir = ensure_data_dir(data_dir)
     sources = load_sources(args.sources, data_dir=data_dir)

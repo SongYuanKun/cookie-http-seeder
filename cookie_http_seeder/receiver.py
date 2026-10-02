@@ -20,10 +20,12 @@ from .notify import notify_needed, notify_pushed
 from .paths import atomic_write_text, ensure_data_dir, token_file, webhook_file
 from .process_lock import DataDirectoryInUse, DataDirectoryLock
 from .senders import MAX_SENDERS, list_sender_tags, sender_directory, sender_tag
+from .session_store import SessionConflict, metadata, read_bundle, remove_bundle, write_bundle
 from .store import load_sources, read_snapshot, save_snapshot
 from .sync_state import PreconditionRequired, SnapshotConflict, SyncState
 
 _MAX_BODY_BYTES = 512 * 1024
+_MAX_SESSION_BODY_BYTES = 768 * 1024
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9._-]{16,256}$")
 _EXTENSION_ORIGIN = re.compile(r"^chrome-extension://[a-p]{32}$")
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -129,7 +131,7 @@ class ReceiverState:
                     "sender_tag": self.sender_tag,
                     "capabilities": ["conditional_snapshots", "validation_feedback", "sender_tags",
                                      "source_thresholds", "sender_status_summary",
-                                     "stale_notifications"]}
+                                     "stale_notifications", "encrypted_session_bundles"]}
 
     def check_revision(self, revision: object) -> None:
         if not isinstance(revision, str) or revision != self.revision:
@@ -150,6 +152,7 @@ class ReceiverState:
                 if updated != previous:
                     save_snapshot([], source=name, spec=old, updated_at=_utc_now(),
                                   data_dir=self.data_dir)
+                    remove_bundle(self.data_dir, name)
             atomic_write_text(self.sources_path,
                               json.dumps({"schema_version": 1, "sources": sources}, indent=2)
                               + "\n", mode=0o600)
@@ -203,6 +206,31 @@ class ReceiverState:
                 raise ValueError("unknown source")
             return {"ok": True, "source": source, "snapshot_version": self.sync.version(source),
                     "config_revision": self.revision, "enabled": self.sources[source]["enabled"]}
+
+    def session_metadata(self, source: str) -> dict[str, Any]:
+        with self.lock:
+            spec = self.sources.get(source)
+            if spec is None:
+                raise ValueError("unknown source")
+            return metadata(
+                read_bundle(self.data_dir, source), source, self.revision, spec["enabled"]
+            )
+
+    def ingest_session(self, payload: object, *, peer_ip: str) -> dict[str, Any]:
+        if not isinstance(payload, dict) or set(payload) != {
+                "source", "envelope", "config_revision", "expected_version", "request_id"}:
+            raise ValueError("invalid session upload")
+        with self.lock:
+            self.check_revision(payload["config_revision"])
+            source = payload["source"]
+            if (not isinstance(source, str) or source not in self.sources
+                    or not self.sources[source]["enabled"]):
+                raise ValueError("unknown or paused source")
+            return write_bundle(
+                self.data_dir, source=source, envelope=payload["envelope"],
+                revision=self.revision, expected_version=payload["expected_version"],
+                request_id=payload["request_id"], peer_ip=peer_ip, updated_at=_utc_now()
+            )
 
     def report(self, payload: object, *, notify: bool = False) -> dict[str, Any]:
         with self.lock:
@@ -397,14 +425,14 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
                 return False
             return super().handle_expect_100()
 
-        def _read_json(self) -> object:
+        def _read_json(self, *, max_bytes: int = _MAX_BODY_BYTES) -> object:
             lengths = self.headers.get_all("Content-Length", [])
             if self.headers.get("Transfer-Encoding") or len(lengths) != 1:
                 raise ValueError("one Content-Length and no Transfer-Encoding required")
             if not re.fullmatch(r"[0-9]{1,9}", lengths[0]):
                 raise ValueError("invalid content length")
             length = int(lengths[0])
-            if not 0 < length <= _MAX_BODY_BYTES:
+            if not 0 < length <= max_bytes:
                 raise ValueError("invalid content length")
             if self.headers.get_content_type() != "application/json":
                 raise ValueError("Content-Type must be application/json")
@@ -438,6 +466,12 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
                         self._send(200, state.source_version(self.path.removeprefix("/v2/sync/")))
                     except (ValueError, OSError, TypeError):
                         self._send(400, {"ok": False, "error": "invalid_source_or_state"})
+                elif self.path.startswith("/v3/session-bundles/"):
+                    try:
+                        self._send(200, state.session_metadata(
+                            self.path.removeprefix("/v3/session-bundles/")))
+                    except (ValueError, OSError, TypeError):
+                        self._send(400, {"ok": False, "error": "invalid_source_or_state"})
                 else:
                     self._send(404, {"ok": False, "error": "not_found"})
 
@@ -451,6 +485,9 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
                     return
                 if self.command == "POST" and self.path == "/v2/cookies":
                     result = state.ingest(self._read_json(), notify=notify)
+                elif self.command == "POST" and self.path == "/v3/session-bundles":
+                    payload = self._read_json(max_bytes=_MAX_SESSION_BODY_BYTES)
+                    result = state.ingest_session(payload, peer_ip=self.client_address[0])
                 elif self.command == "POST" and self.path == "/v1/feedback":
                     result = state.report(self._read_json(), notify=notify)
                 elif self.command == "PUT" and self.path == "/v1/sources":
@@ -469,6 +506,9 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
                 return
             except SnapshotConflict:
                 self._send(409, {"ok": False, "error": "snapshot_conflict"})
+                return
+            except SessionConflict:
+                self._send(409, {"ok": False, "error": "session_conflict"})
                 return
             except ConflictError:
                 self._send(409, {"ok": False, "error": "configuration_changed"})

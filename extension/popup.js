@@ -18,6 +18,13 @@ async function refresh() {
   status.className = Object.values(jobs).some(j => ["blocked", "exhausted"].includes(j.phase)) ? "error" : "ok";
 }
 document.getElementById("manage").addEventListener("click", () => chrome.runtime.openOptionsPage());
+document.getElementById("capture").addEventListener("click", async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!Number.isSafeInteger(tab?.id)) throw new Error("无法确定当前网站标签");
+    await chrome.tabs.create({ url: chrome.runtime.getURL(`capture.html?tab=${tab.id}`) });
+  } catch { status.textContent = "无法打开采集页，请从网站标签重试"; status.className = "error"; }
+});
 document.getElementById("refresh").addEventListener("click", () => refresh().catch(() => { status.textContent = "读取失败"; }));
 document.getElementById("push").addEventListener("click", async event => {
   event.target.disabled = true; status.textContent = "正在同步；临时故障会排队重试…";

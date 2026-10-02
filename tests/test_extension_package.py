@@ -34,7 +34,8 @@ def test_build_complete_versioned_client_without_extra_sensitive_files(tmp_path)
         manifest = json.loads(package.read("manifest.json"))
         assert manifest["version"] == __version__ == metadata["project"]["version"] == "0.4.0"
         assert {"login_monitor.js", "sender_summary.js", "background.js", "options.js",
-                "options.html", "popup.html", "settings_lock.js", "icons/icon128.png"} <= names
+                "options.html", "popup.html", "settings_lock.js", "icons/icon128.png",
+                "capture.html", "capture.js", "session_capture.js", "session_bundle.js"} <= names
         assert "cookie-receiver.token" not in names
         assert "cookies.json" not in names
         assert "unreferenced-debug.js" not in names
@@ -45,10 +46,11 @@ def test_build_complete_versioned_client_without_extra_sensitive_files(tmp_path)
     assert build_extension(source, tmp_path / "second-dist").read_bytes() == original
 
 
-def test_missing_imported_module_rejects_incomplete_client(tmp_path):
+@pytest.mark.parametrize("missing", ["login_monitor.js", "capture.html", "session_capture.js"])
+def test_missing_imported_module_rejects_incomplete_client(tmp_path, missing):
     source = tmp_path / "extension"
     shutil.copytree(ROOT / "extension", source)
-    (source / "login_monitor.js").unlink()
+    (source / missing).unlink()
     with pytest.raises(ValueError, match="missing"):
         build_extension(source, tmp_path / "dist")
     assert not list((tmp_path / "dist").glob("*.zip"))
