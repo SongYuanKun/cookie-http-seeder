@@ -10,10 +10,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.request import Request, urlopen
 
 import pytest
-
-from cookie_http_seeder.session_import import import_into_profile, prepare_import
-from cookie_http_seeder.receiver import build_handler, configure
 from test_session_bundle import PAYLOAD, _encrypted
+
+from cookie_http_seeder.receiver import build_handler, configure
+from cookie_http_seeder.session_import import import_into_profile, prepare_import
 
 
 @pytest.mark.skipif(not shutil.which("google-chrome") or not shutil.which("openssl"),

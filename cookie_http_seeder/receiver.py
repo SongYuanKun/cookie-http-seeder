@@ -202,7 +202,9 @@ class ReceiverState:
             spec = self.sources.get(source)
             if spec is None:
                 raise ValueError("unknown source")
-            return metadata(read_bundle(self.data_dir, source), source, self.revision, spec["enabled"])
+            return metadata(
+                read_bundle(self.data_dir, source), source, self.revision, spec["enabled"]
+            )
 
     def ingest_session(self, payload: object, *, peer_ip: str) -> dict[str, Any]:
         if not isinstance(payload, dict) or set(payload) != {
@@ -211,12 +213,14 @@ class ReceiverState:
         with self.lock:
             self.check_revision(payload["config_revision"])
             source = payload["source"]
-            if not isinstance(source, str) or source not in self.sources or not self.sources[source]["enabled"]:
+            if (not isinstance(source, str) or source not in self.sources
+                    or not self.sources[source]["enabled"]):
                 raise ValueError("unknown or paused source")
-            return write_bundle(self.data_dir, source=source, envelope=payload["envelope"],
-                                revision=self.revision, expected_version=payload["expected_version"],
-                                request_id=payload["request_id"], peer_ip=peer_ip,
-                                updated_at=_utc_now())
+            return write_bundle(
+                self.data_dir, source=source, envelope=payload["envelope"],
+                revision=self.revision, expected_version=payload["expected_version"],
+                request_id=payload["request_id"], peer_ip=peer_ip, updated_at=_utc_now()
+            )
 
     def report(self, payload: object, *, notify: bool = False) -> dict[str, Any]:
         with self.lock:

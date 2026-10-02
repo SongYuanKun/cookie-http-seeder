@@ -5,9 +5,9 @@ import json
 from pathlib import Path
 
 import pytest
+from test_session_bundle import PAYLOAD, _encrypted
 
 from cookie_http_seeder.session_import import import_into_profile, prepare_import
-from test_session_bundle import PAYLOAD, _encrypted
 
 
 @pytest.fixture

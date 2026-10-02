@@ -28,7 +28,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "cryptography>=41"]
 session = ["cryptography>=41", "playwright>=1.61"]
 
 [project.urls]

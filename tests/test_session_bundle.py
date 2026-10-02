@@ -8,7 +8,6 @@ import pytest
 
 from cookie_http_seeder.session_bundle import decrypt_bundle, validate_payload
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD = {
     "schema_version": 1, "source": "site", "domains": ["example.com"],
