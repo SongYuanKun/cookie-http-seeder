@@ -9,9 +9,10 @@
 消费者按实际请求 URL 选择适用 Cookie。不自动登录、不处理验证码、不复制完整浏览器会话。
 登录是否有效由爬虫按站点规则反馈，不能由“同步成功”推断。
 
-当前代码包含结构化快照、动态网站配置、可靠同步、当地时间显示、单实例保护和发送端标签。
-包与扩展的版本元数据仍为 `0.3.0`；标签支持通过 `sender_tags` 能力协商判断，
-不能仅凭版本号判断是否支持。变更记录见 [CHANGELOG](CHANGELOG.md)。
+当前代码版本为 **0.4.0**，包含结构化快照、可靠同步、发送端标签、爬虫消费/反馈/暂停恢复、
+按来源配置的新鲜度与反馈时效、全标签概览，以及可选的浏览器提醒和低频故障恢复。
+功能支持仍通过能力协商判断；标签检查 `sender_tags`，概览检查 `sender_status_summary`，
+阈值检查 `source_thresholds`。变更记录见 [CHANGELOG](CHANGELOG.md)。
 
 ```text
 家用 Chrome（标签 home-pc） ─┐
@@ -133,6 +134,21 @@ client = ReceiverClient(
 旧版本反馈返回 409；新快照重置验证记录；相同内容重复同步不刷新旧验证的时效。
 允许的结果与原因见 [可靠同步协议](docs/phase2.md)。不存在远程下载 Cookie 的读取 API。
 
+### 完整的爬虫接入与失效恢复
+
+`CookieConsumer` 将原子读取、业务判定、版本绑定反馈和暂停状态串起来。
+确认失效后同一版本不会再次请求；暂停状态持久化在消费者自己的可写目录，数据卷仍可只读挂载。
+新快照只允许先验证，确认 valid 后恢复。反馈断网保留待反馈记录，`flush_feedback()` 最多尝试三次；
+旧版本 409 会丢弃，不影响新快照。HTTP 200/403、同步成功和 Cookie 新鲜度都不能替代站点业务规则。
+
+```bash
+python examples/crawl_with_feedback.py beike --data-dir ./data --sender-tag home-pc \
+  --url https://www.ke.com/ --rules /private/path/beike-response-rules.json
+```
+
+上面的规则文件须来自你的实际爬虫，仓库中的模板不代表贝壳真实响应协议。
+完整 helper、明确 JSON/正文判定、暂停恢复和退出码见 [爬虫接入](docs/consumer-recovery.md)。
+
 ## 常用命令
 
 全局参数在子命令前，`--sender-tag` 放在支持它的子命令后。
@@ -140,6 +156,7 @@ client = ReceiverClient(
 ```bash
 cookie-http-seeder --data-dir ./data paths
 cookie-http-seeder --data-dir ./data senders
+cookie-http-seeder --data-dir ./data status --all-senders --json
 cookie-http-seeder --data-dir ./data status --sender-tag home-pc
 cookie-http-seeder --data-dir ./data doctor --sender-tag home-pc --local-only
 cookie-http-seeder --data-dir ./data doctor --sender-tag home-pc
@@ -195,9 +212,16 @@ default 配置解析顺序：`--sources` → `COOKIE_HTTP_SEEDER_SOURCES` → �
 队列只保存来源与重试状态，不保存旧 Cookie 请求体；每次尝试先读取版本，再重新采集。
 临时故障最多尝试 5 次，401/403、授权或配置错误需手动修复。CAS 防止旧版本直接覆盖，
 不是设备所有权或同标签多账号合并策略。相同内容不反复改写快照或发送成功通知。
+可选“故障耗尽后恢复探测”默认关闭，开启须为 15–10080 分钟。
+临时故障耗尽后每个间隔最多做一次探测/重新采集，不重新补满五次；鉴权与授权错误仍阻塞。
+关闭设置、切换连接、撤销授权或暂停来源会取消旧探测；浏览器关闭期间不能执行。
 
 状态面板分别显示授权、同步、新鲜度和爬虫反馈；断连后不沿用旧的“有效”结果。
-新鲜度和反馈时效阈值为 24 小时；invalid 提醒按标签/来源冷却 15 分钟。
+新鲜度和反馈时效默认分别为 24 小时，可用来源的 `stale_after_seconds`、
+`validation_ttl_seconds` 独立配置，范围 60–2592000 秒。仅修改阈值保留 Cookie 与反馈。
+invalid 和长期未同步飞书提醒分别按标签/来源冷却 15 分钟；接收进程每分钟检查已有启用来源。
+扩展“登录 / 未同步提醒检查”默认关闭；开启后按指定间隔查询当前授权来源状态，
+对失效、验证过期、未同步发本地通知，同版本同条件去重，并保持每来源 15 分钟冷却。
 飞书为可选且尽力交付，不保证送达，也不会自动重新登录。
 
 ## 当地时间与升级
@@ -207,6 +231,10 @@ default 配置解析顺序：`--sources` → `COOKIE_HTTP_SEEDER_SOURCES` → �
 不要把显示字符串写回协议。服务器或容器使用 UTC 时不会自动变成北京时间，见 [时间显示](docs/time-display.md)。
 
 升级前先停止旧接收端并保护好数据备份，更新 Python 包和扩展，重启服务并重新加载扩展。
+使用 `python scripts/build_extension.py` 生成 `dist/cookie-http-seeder-extension-0.4.0.zip`，
+或下载对应提交 CI 的 `cookie-http-seeder-extension` artifact。更新原加载目录并重新加载扩展，
+设置页显示客户端版本；新接收端 `/healthz`、配置和状态响应包含 `receiver_version`。
+具体客户端更新与验收见 [升级说明](docs/client-upgrade.md)。
 旧客户端缺少标签时仍使用 default，无需迁移根目录旧文件。非默认标签必须由支持 `sender_tags`
 能力及标签回显的新版两端配合；旧接收端不能假装接收标签。更换标签后需重新授权并推送。
 
@@ -237,6 +265,8 @@ CI 使用 Python 3.11/3.12/3.13 和 Node 22。Chrome API mock 测试不代替真
 | 文档 | 用途 |
 |---|---|
 | [发送端标签](docs/sender-tags.md) | 分组、协议兼容、标签切换和读取 |
+| [爬虫接入](docs/consumer-recovery.md) | 完整反馈、站点规则、失效暂停和更新后恢复 |
+| [客户端升级](docs/client-upgrade.md) | 0.4.0 构建包、保留配置和实机验收 |
 | [部署指南](docs/deploy.md) | Docker、systemd、数据目录和更新 |
 | [时间显示](docs/time-display.md) | 当地时间与机器格式边界 |
 | [完整性补全](docs/completeness-review.md) | 启动修复、单实例锁、授权撤销和状态面板 |

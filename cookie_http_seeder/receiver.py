@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from .cookies import normalize_sources
 from .notify import notify_needed, notify_pushed
 from .paths import atomic_write_text, ensure_data_dir, token_file, webhook_file
@@ -123,6 +124,7 @@ class ReceiverState:
     def document(self) -> dict[str, Any]:
         with self.lock:
             return {"ok": True, "schema_version": 1, "protocol_version": 2,
+                    "receiver_version": __version__,
                     "sources": json.loads(json.dumps(self.sources)), "revision": self.revision,
                     "sender_tag": self.sender_tag,
                     "capabilities": ["conditional_snapshots", "validation_feedback", "sender_tags",
@@ -257,6 +259,7 @@ class ReceiverState:
                             "syncError": "unreadable_sync_state"}
                 sources[name] = {**entry, "enabled": spec["enabled"], **sync}
             return {"ok": True, "sender_tag": self.sender_tag,
+                    "receiver_version": __version__,
                     "sources": sources, "config_revision": self.revision,
                     "observedAt": _utc_now()}
 
@@ -413,7 +416,7 @@ def build_handler(expected_token: str, *, notify: bool = False) -> type[BaseHTTP
 
         def do_GET(self) -> None:  # noqa: N802
             if self.path == "/healthz":
-                self._send(200, {"status": "ok"})
+                self._send(200, {"status": "ok", "receiver_version": __version__})
             elif self._authorize():
                 if self.path == "/v1/senders":
                     try:

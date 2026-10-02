@@ -86,6 +86,24 @@ def test_json_rules_use_exact_types_and_explicit_positive_evidence():
     assert rules(Response(200, 'not-json')).result == "error"
 
 
+def test_site_json_rules_preserve_expiry_and_account_mismatch_reasons():
+    rules = ResponseRules.from_document({"schema_version": 1, "invalid_json": [
+        {"path": ["code"], "equals": "SESSION_EXPIRED", "reason_code": "session_expired"},
+        {"path": ["account"], "equals": "wrong", "reason_code": "account_mismatch"},
+    ]})
+    assert rules(Response(200, '{"code":"SESSION_EXPIRED"}')) == Observation(
+        "invalid", "session_expired")
+    assert rules(Response(200, '{"account":"wrong"}')) == Observation("invalid", "account_mismatch")
+
+
+@pytest.mark.parametrize("response", [Response(200, "ACCOUNT_OK", {1: "bad"}),
+                                      Response(-1, "LOGIN_REQUIRED"),
+                                      Response(200, "ACCOUNT_OK", ["bad"])])
+def test_malformed_response_never_crashes_or_claims_invalid(setup, response):
+    _, _, consumer = setup
+    assert consumer.classify(response) == Observation("error", "unexpected_response")
+
+
 def test_only_explicit_login_redirect_path_is_invalid(setup):
     _, _, consumer = setup
     assert consumer.classify(Response(302, "", {"Location": "/login?next=/me"})).result == "invalid"
@@ -263,3 +281,37 @@ def test_malformed_persisted_consumer_state_fails_closed(setup):
     consumer.state_path.write_text(json.dumps({"schema_version": 999}))
     with pytest.raises(ValueError):
         consumer.request("https://example.test/me", lambda *_: pytest.fail("no request"))
+
+
+@pytest.mark.parametrize("mutation", ["missing_blocked", "missing_pending", "extra_field"])
+def test_incomplete_or_extra_consumer_state_stops_before_sending(setup, mutation):
+    state, _, consumer = setup
+    seed(state)
+    saved = consumer._load()
+    if mutation == "missing_blocked":
+        del saved["blocked_version"]
+    elif mutation == "missing_pending":
+        del saved["pending_feedback"]
+    else:
+        saved["unexpected"] = "synthetic-should-not-persist"
+    consumer.state_path.parent.mkdir(parents=True, exist_ok=True)
+    consumer.state_path.write_text(json.dumps(saved))
+    with pytest.raises(ValueError, match="invalid consumer state"):
+        consumer.request("https://example.test/me", lambda *_: pytest.fail("must not send"))
+
+
+def test_snapshot_read_failure_after_invalid_response_keeps_durable_pause(setup, monkeypatch):
+    import cookie_http_seeder.consumer as module
+    state, client, consumer = setup
+    version = seed(state)["snapshot_version"]
+    client.fail = True
+    with monkeypatch.context() as patch:
+        def unavailable(*args, **kwargs):
+            raise OSError("synthetic temporary read failure")
+        patch.setattr(module, "read_snapshot", unavailable)
+        result = consumer.request("https://example.test/me",
+                                  lambda *_: Response(200, "LOGIN_REQUIRED"))
+    assert result.paused and result.feedback_status == "pending"
+    assert consumer._load()["blocked_version"] == version
+    with pytest.raises(LoginRequired):
+        consumer.request("https://example.test/me", lambda *_: pytest.fail("must remain paused"))

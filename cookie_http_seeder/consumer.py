@@ -95,26 +95,32 @@ class ResponseRules:
             if not isinstance(rules, list) or len(rules) > 32:
                 raise ValueError("JSON rules require a bounded list")
             for rule in rules:
-                if (not isinstance(rule, dict) or set(rule) != {"path", "equals"}
+                allowed = {"path", "equals"}
+                if name == "invalid_json":
+                    allowed |= {"reason_code"}
+                if (not isinstance(rule, dict) or set(rule) - allowed
+                        or not {"path", "equals"} <= set(rule)
                         or not isinstance(rule["path"], list) or not 1 <= len(rule["path"]) <= 16
                         or any(not isinstance(k, str) or not 1 <= len(k) <= 128
                                for k in rule["path"])
                         or type(rule["equals"]) not in {str, int, bool, float, type(None)}
                         or (type(rule["equals"]) is float and not math.isfinite(rule["equals"]))):
                     raise ValueError("invalid JSON path/equality rule")
+                if "reason_code" in rule:
+                    Observation("invalid", rule["reason_code"])
             setattr(instance, name, tuple(json.loads(json.dumps(rules))))
         if not any(getattr(instance, key) for key in fields - {"schema_version"}):
             raise ValueError("configure explicit site response evidence")
         return instance
 
     @staticmethod
-    def _json_matches(body: str, rules: tuple) -> bool:
+    def _json_matches(body: str, rules: tuple) -> dict | None:
         if not rules:
-            return False
+            return None
         try:
             document = json.loads(body)
         except (ValueError, TypeError, RecursionError):
-            return False
+            return None
         for rule in rules:
             value = document
             for key in rule["path"]:
@@ -124,12 +130,16 @@ class ResponseRules:
             else:
                 expected = rule["equals"]
                 if type(value) is type(expected) and value == expected:
-                    return True
-        return False
+                    return rule
+        return None
 
     def __call__(self, response: Response) -> Observation:
         if (not isinstance(response, Response) or type(response.status) is not int
-                or not isinstance(response.body, str) or len(response.body) > 1024 * 1024):
+                or not 100 <= response.status <= 599
+                or not isinstance(response.body, str) or len(response.body) > 1024 * 1024
+                or not isinstance(response.headers, dict)
+                or any(not isinstance(k, str) or not isinstance(v, str)
+                       for k, v in response.headers.items())):
             return Observation("error", "unexpected_response")
         if response.status == 429:
             return Observation("error", "rate_limited")
@@ -145,8 +155,10 @@ class ResponseRules:
             if any(path == p or path.startswith(p.rstrip("/") + "/")
                    for p in self.login_redirect_paths):
                 return Observation("invalid", "login_required")
-        if (any(marker in response.body for marker in self.invalid_body_contains)
-                or self._json_matches(response.body, self.invalid_json)):
+        invalid_json = self._json_matches(response.body, self.invalid_json)
+        if invalid_json:
+            return Observation("invalid", invalid_json.get("reason_code", "login_required"))
+        if any(marker in response.body for marker in self.invalid_body_contains):
             return Observation("invalid", "login_required")
         if 200 <= response.status < 300 and (
             any(marker in response.body for marker in self.valid_body_contains)
@@ -192,7 +204,11 @@ class CookieConsumer:
             state = json.loads(self.state_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             raise ValueError("unreadable consumer state") from None
-        if (not isinstance(state, dict) or state.get("schema_version") != 1
+        if (not isinstance(state, dict)
+                or set(state) != {"schema_version", "identity", "blocked_version",
+                                  "pending_feedback", "feedback_attempts"}
+                or type(state.get("schema_version")) is not int
+                or state.get("schema_version") != 1
                 or state.get("identity") != self.identity
                 or (state.get("blocked_version") is not None
                     and not VERSION.fullmatch(str(state["blocked_version"])))
@@ -272,7 +288,15 @@ class CookieConsumer:
                 observation = self.classify(response)
                 if not isinstance(observation, Observation):
                     raise ValueError("classifier must return Observation")
-            current = read_snapshot(self.source, data_dir=self.data_dir, sender_tag=self.sender_tag)
+            try:
+                current = read_snapshot(self.source, data_dir=self.data_dir,
+                                        sender_tag=self.sender_tag)
+            except (OSError, ValueError):
+                # Retain the invalid version when current storage cannot be checked.
+                # This never blocks a different version after storage recovers.
+                current = None
+                if observation.result == "invalid":
+                    state["blocked_version"] = version
             if isinstance(current, dict) and current.get("snapshot_version") == version:
                 if observation.result == "invalid":
                     state["blocked_version"] = version

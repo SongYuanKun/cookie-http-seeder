@@ -1,3 +1,6 @@
+> 0.4 增量见 [爬虫接入与恢复](consumer-recovery.md) 和 [客户端升级](client-upgrade.md)。
+> 0.4 支持独立阈值及默认关闭的低频恢复探测；本文 24 小时和手动恢复描述为 0.3 默认行为。
+
 > 本文描述 0.3 的可靠同步基础，当前应同时阅读 [发送端标签](sender-tags.md)。
 > 下文默认示例未带标签时进入 default；非默认标签的请求增加 `X-Sender-Tag`，
 > CLI 增加 `--sender-tag`，Python 读取与反馈使用同一 `sender_tag`。

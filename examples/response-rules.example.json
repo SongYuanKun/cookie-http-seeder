@@ -4,7 +4,7 @@
     {"path": ["user", "loggedIn"], "equals": true}
   ],
   "invalid_json": [
-    {"path": ["code"], "equals": "SESSION_EXPIRED"}
+    {"path": ["code"], "equals": "SESSION_EXPIRED", "reason_code": "session_expired"}
   ],
   "invalid_body_contains": ["EXAMPLE_LOGIN_REQUIRED_MARKER_REPLACE_WITH_SITE_EVIDENCE"],
   "login_redirect_paths": ["/login"]

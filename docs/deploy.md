@@ -133,6 +133,7 @@ ssh -N -L 18765:127.0.0.1:18765 user@crawler-host
 ```bash
 cookie-http-seeder --data-dir ./data paths
 cookie-http-seeder --data-dir ./data senders
+cookie-http-seeder --data-dir ./data status --all-senders
 cookie-http-seeder --data-dir ./data status --sender-tag home-pc
 cookie-http-seeder --data-dir ./data doctor --sender-tag home-pc
 cookie-http-seeder --data-dir ./data status --sender-tag home-pc --json
@@ -161,9 +162,22 @@ systemd 可在 drop-in 的 `[Service]` 中设置 `Environment=TZ=Asia/Shanghai` 
 ## 升级兼容与安全检查
 
 未带标签的旧客户端使用 default；新标签不迁移旧文件，也不共享旧 Cookie。
-使用非默认标签时两端都需要 `sender_tags` 能力及回显检查；不要只看 0.3.0 版本号。
+使用非默认标签时两端都需要 `sender_tags` 能力及回显检查；不要只看版本号。
 更新后重新加载扩展，切换标签时重新授权。0.1 上传接口返回 410，缺条件写入字段返回 428。
 
 保护整个数据根目录和备份：POSIX 目录 0700、凭据文件 0600，Windows 另设 ACL。
 不同可信边界需要独立 Token/服务/目录，不能靠标签提供权限隔离。
 不把数据卷、Cookie、Token 或通知 URL 上传到 Git；详见 [安全说明](../SECURITY.md)。
+
+## 0.4 爬虫状态与客户端升级
+
+每来源可设置 `stale_after_seconds` 和 `validation_ttl_seconds`（60–2592000 秒，默认 86400）。
+`source_thresholds`、`sender_status_summary`、`stale_notifications` 为相应接收端能力；
+`/healthz` 和状态响应提供 `receiver_version`，仍须以能力判断接口支持。
+只修改阈值保留快照与反馈。开启接收端通知后每分钟扫描已存在的启用来源，
+未同步提醒单独按标签/来源冷却 15 分钟；无 webhook 或 `--no-notify` 时不发通知。
+
+爬虫数据卷可继续只读，消费者状态单独保存在可写目录；迁移任务时保留这个状态，
+防止重复使用已确认失效的版本。见 [爬虫接入](consumer-recovery.md)。
+浏览器的低频恢复探测和登录状态提醒均默认关闭；需要时显式启用。
+安装包构建、保留设置和核验步骤见 [客户端升级](client-upgrade.md)。
