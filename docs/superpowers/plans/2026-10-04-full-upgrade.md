@@ -55,11 +55,11 @@
 
 **Interfaces:** `IncidentStore(data_dir, clock=time.time)`提供`observe(source, status)`、`list()`和`act(source, incident_id, action, duration_seconds=None)`；GET `/v1/incidents`、POST `/v1/incidents/{source}`，capability `source_incidents`。
 
-- [ ] 写invalid去重、确认/静默持久化、旧ID拒绝、100条历史、跨标签隔离、旧反馈409不影响新事件测试。
-- [ ] 写invalid→新unverified→新valid恢复，以及同版本valid不恢复、stale/expired独立语义、无webhook不发消息测试。
-- [ ] 运行 `python -m pytest tests/test_incidents.py` 确认失败。
-- [ ] 实现有界元数据状态机和周期扫描，GET只读；通知尊重事件处置并保留冷却，配置缩窄失效。
-- [ ] 运行事件/monitoring/sync/receiver测试，确认无真实消息发送；提交。
+- [x] 写invalid去重、确认/静默持久化、旧ID拒绝、100条历史、跨标签隔离、旧反馈409不影响新事件测试。
+- [x] 写invalid→新unverified→新valid恢复，以及同版本valid不恢复、stale/expired独立语义、无webhook不发消息测试。
+- [x] 运行 `python -m pytest tests/test_incidents.py` 确认失败。
+- [x] 实现有界元数据状态机和周期扫描，GET只读；通知尊重事件处置并保留冷却，配置缩窄失效。
+- [x] 运行事件/monitoring/sync/receiver测试，确认无真实消息发送；提交。
 
 ## Task 4：消费模块拆分、outbox迁移与正式CLI
 

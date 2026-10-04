@@ -11,6 +11,7 @@ from typing import Any
 from . import __version__
 from .client_health import ClientHealthStore
 from .cookies import normalize_sources
+from .incidents import IncidentStore
 from .notify import notify_needed, notify_pushed
 from .paths import atomic_write_text, ensure_data_dir, webhook_file
 from .senders import MAX_SENDERS, list_sender_tags, sender_directory, sender_tag
@@ -33,6 +34,7 @@ class ReceiverState:
         self.lock = threading.RLock()
         self.sync = SyncState(self.data_dir)
         self.client_health = ClientHealthStore(self.data_dir)
+        self.incidents = IncidentStore(self.data_dir)
         # Fresh on every boot and config write; avoids the content-hash ABA problem.
         self.revision = secrets.token_hex(16)
         self.notify_timer: threading.Timer | None = None
@@ -82,7 +84,7 @@ class ReceiverState:
                     "sender_tag": self.sender_tag,
                     "capabilities": ["conditional_snapshots", "validation_feedback", "sender_tags",
                                      "source_thresholds", "sender_status_summary",
-                                     "stale_notifications", "client_health"]}
+                                     "stale_notifications", "client_health", "source_incidents"]}
 
     def check_revision(self, revision: object) -> None:
         if not isinstance(revision, str) or revision != self.revision:
@@ -102,6 +104,7 @@ class ReceiverState:
                            if replacement is not None else None)
                 if updated != previous:
                     self.client_health.forget([name])
+                    self.incidents.forget([name])
                     save_snapshot([], source=name, spec=old, updated_at=_utc_now(),
                                   data_dir=self.data_dir)
             atomic_write_text(self.sources_path,
@@ -142,6 +145,7 @@ class ReceiverState:
             if spec is None or not spec["enabled"]:
                 raise ValueError("unknown or paused source")
             result = self.sync.accept(payload, spec)
+            self.observe_incidents(source)
             if notify and not result["unchanged"]:
                 self.pending_notify.add(source)
                 if self.notify_timer is not None:
@@ -164,7 +168,9 @@ class ReceiverState:
             if (not isinstance(source, str) or source not in self.sources
                     or not self.sources[source]["enabled"]):
                 raise ValueError("unknown or paused source")
-            result, should_notify = self.sync.feedback(payload, notify=notify)
+            allowed = self.incidents.may_notify(source, "login_invalid")
+            result, should_notify = self.sync.feedback(payload, notify=notify and allowed)
+            self.observe_incidents(source)
             if should_notify:
                 # Fixed structured reason only: never send crawler response bodies or tokens.
                 reason = f"{self.sender_tag}/{source}: {payload['reason_code']}"
@@ -215,7 +221,33 @@ class ReceiverState:
             return {"ok": True, "sender_tag": self.sender_tag,
                     "receiver_version": __version__,
                     "sources": sources, "config_revision": self.revision,
-                    "observedAt": _utc_now(), "clientHealth": self.client_health.status()}
+                    "observedAt": _utc_now(), "clientHealth": self.client_health.status(),
+                    "incidents": self.incident_status()}
+
+    def observe_incidents(self, source):
+        spec = self.sources[source]
+        self.incidents.observe(source, self.sync.status(
+            source, stale_after=spec.get("stale_after_seconds", 86400),
+            validation_ttl=spec.get("validation_ttl_seconds", 86400)))
+
+    def incident_status(self):
+        with self.lock:
+            try:
+                return self.incidents.list()
+            except (OSError, ValueError, TypeError, OverflowError):
+                return {"ok": False, "error": "unreadable_incidents", "active": [], "history": []}
+
+    def incident_action(self, source, body):
+        with self.lock:
+            if source not in self.sources or not isinstance(body, dict):
+                raise ValueError("invalid incident source or action")
+            expected = {"incident_id", "action"}
+            if body.get("action") == "snooze":
+                expected.add("duration_seconds")
+            if set(body) != expected:
+                raise ValueError("invalid incident action fields")
+            return self.incidents.act(source, body["incident_id"], body["action"],
+                                      body.get("duration_seconds"))
 
     def initialized_states(self):
         """Enumerate existing labels only; one corrupt label does not hide the others."""

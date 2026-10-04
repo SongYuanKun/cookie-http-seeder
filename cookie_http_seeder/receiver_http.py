@@ -119,6 +119,8 @@ def build_handler(expected_token: str, *, state: ReceiverState,
                     return
                 if self.path == "/v1/sources":
                     self._send(200, state.document())
+                elif self.path == "/v1/incidents":
+                    self._send(200, state.incident_status())
                 elif self.path == "/v1/client-health":
                     self._send(200, state.client_health.status())
                 elif self.path == "/v1/status":
@@ -141,6 +143,9 @@ def build_handler(expected_token: str, *, state: ReceiverState,
                     return
                 if self.command == "POST" and self.path == "/v2/cookies":
                     result = state.ingest(self._read_json(), notify=notify)
+                elif self.command == "POST" and self.path.startswith("/v1/incidents/"):
+                    result = state.incident_action(
+                        self.path.removeprefix("/v1/incidents/"), self._read_json())
                 elif self.command == "POST" and self.path == "/v1/client-health":
                     with state.lock:
                         result = state.client_health.accept(self._read_json(), state.sources)
