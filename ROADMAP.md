@@ -9,8 +9,8 @@ This roadmap tracks user-visible delivery and verified adoption. Internal implem
 - [x] Unified extension dashboard; optional client health heartbeat, disabled by default.
 - [x] Linux automated tests and real Chrome 149 controlled-profile acceptance.
 - [x] Receiver and existing Grok extension upgraded in place with preservation receipts.
-- [ ] Public v0.5.0 tag, wheel, extension ZIP and checksums from successful exact-commit CI.
-- [ ] Windows/macOS/Linux CI and installed-wheel verification.
+- [x] Public v0.5.0 tag, wheel, extension ZIP and checksums from successful exact-commit CI.
+- [x] Windows/macOS/Linux CI and installed-wheel verification.
 
 ## Actual crawler and browser acceptance
 
@@ -26,6 +26,8 @@ This roadmap tracks user-visible delivery and verified adoption. Internal implem
 - [ ] Accumulate sustained maintenance history over actual elapsed time.
 
 Submit a [usage report or issue](https://github.com/SongYuanKun/cookie-http-seeder/issues/new/choose). Public reports must exclude real session data. Project maturity and any JetBrains support decision depend on actual evidence and the program's review.
+
+Delivery evidence: [v0.5.0 release](https://github.com/SongYuanKun/cookie-http-seeder/releases/tag/v0.5.0), [exact-commit CI](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199076796), and [release workflow](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199340334). Downloaded wheel and extension ZIP both match the published SHA256SUMS. Native macOS Chrome 154 loaded the published extension at runtime version 0.5.0 in an isolated profile; its storage/reload verification is incomplete and is not counted as full native acceptance.
 
 ## JetBrains support assessment (2026-10-04)
 
