@@ -33,10 +33,10 @@
 
 **Interfaces:** `ReceiverState` 构造/方法保留；`build_handler(token, *, notify=False, state=None)`、`serve(*, host: str, port: int, token: str, notify: bool = False, state=None)`允许显式应用状态；旧configure与receiver导入入口保留。
 
-- [ ] 测试两个显式state的HTTP server同时运行，配置、快照和反馈互不覆盖，旧导入入口仍可用。
-- [ ] 运行新增测试确认缺少隔离接口的失败：`python -m pytest tests/test_receiver_architecture.py`。
-- [ ] 拆分领域/传输/生命周期，保持单目录锁、线程关闭、IPv6/绑定重试和无凭据错误映射。
-- [ ] 运行新增及现有receiver/runtime/发送端测试，修复真实回归；提交该可独立运行的重构。
+- [x] 测试两个显式state的HTTP server同时运行，配置、快照和反馈互不覆盖，旧导入入口仍可用。
+- [x] 运行新增测试确认缺少隔离接口的失败：`python -m pytest tests/test_receiver_architecture.py`。
+- [x] 拆分领域/传输/生命周期，保持单目录锁、线程关闭、IPv6/绑定重试和无凭据错误映射。
+- [x] 运行新增及现有receiver/runtime/发送端测试，修复真实回归；提交该可独立运行的重构。
 
 ## Task 2：客户端健康协议及存储
 
@@ -68,7 +68,7 @@
 **Interfaces:** 现有`Observation/Response/RequestOutcome/ResponseRules/CookieConsumer`兼容导出；`CookieConsumer.status()`提供只读安全状态；CLI `consume/consumer-status/consumer-flush`。
 
 - [ ] 写v1→v2迁移保留blocked_version、16条outbox、每条3次预算、pending invalid不被新请求覆盖测试。
-- [ ] 写配置/鉴权终止错误blocked、旧版本反馈discarded、磁盘异常和重启锁、安全CLI退出码/无正文输出测试。
+- [ ] 写配置/鉴权终止错误blocked、旧版本反馈discarded、磁盘异常和重启锁、安全CLI退出码/无正文输出测试；consumer-status在无Token/只读目录下不联网、不读Cookie、不创建文件。
 - [ ] 运行 `python -m pytest tests/test_consumer_outbox.py tests/test_consumer_cli.py` 确认失败。
 - [ ] 分离分类/持久化/编排；实现标准库传输、1MiB限制、无重定向、有界等待及明确exit 0/1/2/3/4。
 - [ ] 运行新测试、现有consumer与两个examples测试；更新正式接入示例；提交。
@@ -111,4 +111,5 @@
 - 基线：main `43e591f`；Python282通过（26.82秒），Node230通过（421毫秒）。
 - 隔离路径：`/home/kun/.codex/worktrees/crawler-session-recovery/cookie-http-seeder`。
 - 分支：`codex/full-upgrade-0.5.0`；只使用现有工具/依赖，没有生产改动。
-- 所有Task仍未开始；本文件不是完成回执。实现由主线程直接执行，只有结尾一次独立审查。
+- 已开始Task 1；勾选项和执行ledger记录实际进度。实现由主线程直接执行，只有结尾一次独立审查。
+- 当前完成判定和逐项所需证据见 `docs/superpowers/reviews/2026-10-04-full-upgrade-audit.md`。用户本轮“确认”，进入产品实现。

@@ -119,7 +119,7 @@ def test_sdk_reads_header_and_version_from_selected_snapshot(tmp_path):
 
 
 def test_limits_survive_restart(tmp_path, monkeypatch):
-    monkeypatch.setattr("cookie_http_seeder.receiver.MAX_SENDERS", 1)
+    monkeypatch.setattr("cookie_http_seeder.receiver_state.MAX_SENDERS", 1)
     ReceiverState(SOURCES, tmp_path).for_sender("home-pc")
     root = ReceiverState(SOURCES, tmp_path)
     assert root.for_sender("home-pc").sender_tag == "home-pc"
@@ -296,7 +296,7 @@ def test_notification_uses_root_webhook_and_sender_prefix(tmp_path, monkeypatch)
     state = ReceiverState(SOURCES, tmp_path).for_sender("home-pc")
     sent = []
     monkeypatch.delenv("COOKIE_HTTP_SEEDER_WEBHOOK_FILE", raising=False)
-    monkeypatch.setattr("cookie_http_seeder.receiver.notify_pushed",
+    monkeypatch.setattr("cookie_http_seeder.receiver_state.notify_pushed",
                         lambda **kwargs: sent.append(kwargs) or "sent")
     state.pending_notify.add("demo")
     state.flush_notify()

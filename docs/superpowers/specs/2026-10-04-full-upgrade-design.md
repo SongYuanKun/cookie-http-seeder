@@ -116,6 +116,10 @@ snoozed、awaiting_validation、resolved。
 响应上限 1 MiB，反馈/输出只含结果、原因、版本、反馈状态和暂停状态。
 退出码：0=valid，2=凭据不可用，3=需登录/等待超时，4=业务验证异常，1=配置/运行错误。
 新增 `consumer-status` 与 `consumer-flush`，提供不含凭据的运维入口。
+`consumer-status` 是真正只读的本地查询：不要求 Token，不访问接收端，不读取
+Cookie 快照，也不创建目录/锁/状态文件。身份由数据根、来源、endpoint 和标签
+计算，或用显式状态路径核对；损坏状态只返回受控错误码。`consumer-flush` 才
+加载鉴权凭据并尝试网络反馈，不能借查询动作增加反馈次数。
 
 旧 schema 1 暂停状态可读并迁移为 schema 2，identity 和 blocked_version 保持。
 反馈 outbox 最多 16 条，按版本合并；每条最多 3 次网络尝试，flush 单次最多尝试
