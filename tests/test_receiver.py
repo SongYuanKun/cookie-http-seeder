@@ -292,6 +292,22 @@ def test_http_auth_and_push(receiver):
     assert "test-secret-value" not in status and TOKEN not in status and "unverified" in status
 
 
+def test_client_health_http_authorization_and_safe_status(receiver):
+    req, data, _ = receiver
+    health = {"schema_version": 1, "client_version": "0.5.0", "interval_minutes": 15,
+              "sources": {"site": {"approved": True, "permission_granted": True,
+                                   "sync_phase": "idle", "error_code": "none",
+                                   "last_success_at": None}}}
+    assert req("POST", "/v1/client-health", health, token=None)[0] == 401
+    assert not (data / ".client-health.json").exists()
+    assert req("POST", "/v1/client-health", health)[0] == 200
+    assert req("GET", "/v1/client-health")[1]["state"] == "recent"
+    assert req("GET", "/v1/status")[1]["clientHealth"]["sources"]["site"]["approved"]
+    health["sources"]["site"]["cookie"] = "synthetic-secret"
+    assert req("POST", "/v1/client-health", health)[0] == 400
+    assert "synthetic-secret" not in (data / ".client-health.json").read_text()
+
+
 def test_legacy_network_write_is_rejected(receiver):
     req, _, _ = receiver
     assert req("POST", "/v1/cookies", {"source": "site", "cookie_header": "sid=raw"})[0] == 410

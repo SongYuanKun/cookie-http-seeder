@@ -5,6 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 
+from . import __version__
 from .client import ClientError, ReceiverClient
 from .paths import token_file
 from .receiver import resolve_token
@@ -61,9 +62,11 @@ def diagnose(data_dir: Path, *, endpoint: str = "http://127.0.0.1:18765",
     snapshots = {}
     if sources is not None and data_dir.is_dir():
         sync = SyncState(data_dir)
-        for source in sources:
+        for source, spec in sources.items():
             try:
-                snapshots[source] = sync.status(source)
+                snapshots[source] = sync.status(
+                    source, stale_after=spec.get("stale_after_seconds", 86400),
+                    validation_ttl=spec.get("validation_ttl_seconds", 86400))
                 issue = snapshots[source]["freshness"] in {"missing", "stale", "unknown"}
                 add(f"snapshot:{source}", "warning" if issue else "ok",
                     snapshots[source]["freshness"],
@@ -75,7 +78,17 @@ def diagnose(data_dir: Path, *, endpoint: str = "http://127.0.0.1:18765",
         try:
             client = ReceiverClient(endpoint, token, sender_tag=sender_tag)
             remote = client.request("/v1/sources")
-            client.request("/v1/status")
+            status = client.request("/v1/status")
+            for capability in ("client_health", "source_incidents"):
+                if capability not in remote.get("capabilities", []):
+                    add(capability, "warning", "upgrade_required", "Upgrade receiver to 0.5.0.")
+            health = status.get("clientHealth", {})
+            if health.get("state") in {"overdue", "unknown"}:
+                add("client_health", "warning", health["state"],
+                    "Check the browser and scheduled health reporting.")
+            receiver_version = remote.get("receiver_version")
+            add("receiver_version", "ok" if receiver_version else "warning",
+                "reported" if receiver_version else "unknown")
             add("receiver", "ok", "authenticated")
             if "conditional_snapshots" not in remote.get("capabilities", []):
                 add("protocol", "error", "upgrade_required",
@@ -92,4 +105,5 @@ def diagnose(data_dir: Path, *, endpoint: str = "http://127.0.0.1:18765",
             add("receiver", "error", "invalid_endpoint",
                 "Use an HTTPS origin or http://127.0.0.1:18765.")
     return {"ok": all(c["status"] != "error" for c in checks), "checks": checks,
-            "snapshots": snapshots, "localOnly": local_only, "sender_tag": sender_tag}
+            "snapshots": snapshots, "localOnly": local_only, "client_version": __version__,
+            "sender_tag": sender_tag}

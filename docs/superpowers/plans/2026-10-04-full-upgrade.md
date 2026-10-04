@@ -44,10 +44,10 @@
 
 **Interfaces:** `ClientHealthStore(data_dir, clock=time.time).accept(payload, sources)`和`.status()`；POST/GET `/v1/client-health`，capability `client_health`。
 
-- [ ] 写严格schema、未知来源、越界间隔、未来时间、secret字段拒绝、0600、重启时效和标签隔离测试。
-- [ ] 运行 `python -m pytest tests/test_client_health.py`，确认新协议/模块缺失失败。
-- [ ] 实现精确spec字段/枚举，状态recent/overdue/not_reported，无Cookie读取；接入status/senders/client。
-- [ ] 运行健康/接收端/诊断测试；doctor按来源阈值判断且正确识别版本；提交。
+- [x] 写严格schema、未知来源、越界间隔、未来时间、secret字段拒绝、0600、重启时效和标签隔离测试。
+- [x] 运行 `python -m pytest tests/test_client_health.py`，确认新协议/模块缺失失败。
+- [x] 实现精确spec字段/枚举，状态recent/overdue/not_reported，无Cookie读取；接入status/senders/client。
+- [x] 运行健康/接收端/诊断测试；doctor按来源阈值判断且正确识别版本；提交。
 
 ## Task 3：持久登录事件与确认/静默/恢复
 

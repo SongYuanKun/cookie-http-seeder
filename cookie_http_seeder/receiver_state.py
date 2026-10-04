@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .client_health import ClientHealthStore
 from .cookies import normalize_sources
 from .notify import notify_needed, notify_pushed
 from .paths import atomic_write_text, ensure_data_dir, webhook_file
@@ -31,6 +32,7 @@ class ReceiverState:
         self.sources_path = sources_path or self.data_dir / "sources.json"
         self.lock = threading.RLock()
         self.sync = SyncState(self.data_dir)
+        self.client_health = ClientHealthStore(self.data_dir)
         # Fresh on every boot and config write; avoids the content-hash ABA problem.
         self.revision = secrets.token_hex(16)
         self.notify_timer: threading.Timer | None = None
@@ -80,7 +82,7 @@ class ReceiverState:
                     "sender_tag": self.sender_tag,
                     "capabilities": ["conditional_snapshots", "validation_feedback", "sender_tags",
                                      "source_thresholds", "sender_status_summary",
-                                     "stale_notifications"]}
+                                     "stale_notifications", "client_health"]}
 
     def check_revision(self, revision: object) -> None:
         if not isinstance(revision, str) or revision != self.revision:
@@ -99,6 +101,7 @@ class ReceiverState:
                 updated = ({k: v for k, v in replacement.items() if k not in thresholds}
                            if replacement is not None else None)
                 if updated != previous:
+                    self.client_health.forget([name])
                     save_snapshot([], source=name, spec=old, updated_at=_utc_now(),
                                   data_dir=self.data_dir)
             atomic_write_text(self.sources_path,
@@ -212,7 +215,7 @@ class ReceiverState:
             return {"ok": True, "sender_tag": self.sender_tag,
                     "receiver_version": __version__,
                     "sources": sources, "config_revision": self.revision,
-                    "observedAt": _utc_now()}
+                    "observedAt": _utc_now(), "clientHealth": self.client_health.status()}
 
     def initialized_states(self):
         """Enumerate existing labels only; one corrupt label does not hide the others."""
