@@ -18,7 +18,8 @@ This roadmap tracks user-visible delivery and verified adoption. Internal implem
 - [ ] Activate the approved production crawler integration without bypassing administrator pauses.
 - [ ] Verify the actual site's invalid → pause → new snapshot → valid → recovery flow while preserving administrator pauses.
 - [x] Verify macOS native Chrome release installation, Developer Mode, reload and synthetic settings preservation.
-- [ ] Finish macOS native permission consent/revocation and Windows native Chrome installation, permission and reload acceptance.
+- [x] Verify Windows native Chrome release installation, permission consent/revocation, reload and full settings/approval preservation.
+- [ ] Finish macOS native permission consent and revocation.
 
 Crawler code delivery: the independent `codex/cookie-session-recovery` branch contains 21 new tests. The latest clean-worktree suite passed 2509 tests (1 skipped, 38 subtests); 135 focused tests and 11 subtests passed. Production activation and actual-site login acceptance remain pending. The maintainer's unrelated working-directory changes were preserved.
 
@@ -31,7 +32,7 @@ Crawler code delivery: the independent `codex/cookie-session-recovery` branch co
 
 Submit a [usage report or issue](https://github.com/SongYuanKun/cookie-http-seeder/issues/new/choose). Public reports must exclude real session data. Project maturity and any JetBrains support decision depend on actual evidence and the program's review.
 
-Delivery evidence: [v0.5.0 release](https://github.com/SongYuanKun/cookie-http-seeder/releases/tag/v0.5.0), [exact-commit CI](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199076796), and [release workflow](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199340334). Downloaded wheel and extension ZIP both match the published SHA256SUMS. Native macOS Chrome 154 loaded the published extension at runtime version 0.5.0 in an isolated profile. The native manager reload and synthetic settings preservation passed after waiting for reload completion. Optional example-host permissions remained denied before and after reload; permission consent/revocation and Windows native acceptance remain open. See the [scoped macOS receipt](docs/acceptance/2026-10-04-macos-chrome-0.5.0.json).
+Delivery evidence: [v0.5.0 release](https://github.com/SongYuanKun/cookie-http-seeder/releases/tag/v0.5.0), [exact-commit CI](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199076796), and [release workflow](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199340334). Downloaded wheel and extension ZIP both match the published SHA256SUMS. Native macOS Chrome 154 loaded the published extension at runtime version 0.5.0 in an isolated profile. The native manager reload and synthetic settings preservation passed after waiting for reload completion. Optional example-host permissions remained denied before and after reload; macOS permission consent/revocation remains open. See the [scoped macOS receipt](docs/acceptance/2026-10-04-macos-chrome-0.5.0.json). Windows native Chrome 154.0.8037.58 passed the actual headed installation, owned native Allow prompt, permission grant, manager reload, all settings/source approval preservation and UI revocation gate. Its temporary profile was removed. See the [Windows receipt](docs/acceptance/2026-10-04-windows-chrome-0.5.0.json) and [native run](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37204759247).
 
 ## JetBrains support assessment (2026-10-04)
 
