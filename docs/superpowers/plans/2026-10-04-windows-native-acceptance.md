@@ -27,7 +27,7 @@ Create `scripts/native_browser_acceptance.mjs` and `scripts/windows_native_conse
 - [x] Implement bounded CDP launch/navigation, actual extension source approval with trusted click, owned native permission consent, manager reload and actual UI revocation.
 - [x] Require initial denial, consent, permission/approval persistence, version/settings preservation and final denial/approval removal in the final passed value.
 - [x] Check JS syntax and fail-closed non-Windows invocation.
-- [ ] Run the actual Windows native acceptance gate.
+- [x] Run the actual Windows native acceptance gate.
 
 ## Task 2: Controlled delivery and evidence
 
@@ -35,7 +35,8 @@ Create `.github/workflows/native-browser.yml` with manual dispatch and an owned-
 
 - [x] Implement download of v0.5.0 ZIP from the public release, compare its published and pinned SHA256, extract, then run headed Chrome with a 5-minute job bound.
 - [x] Run one independent read-only review; fix concrete findings and verify them.
-- [ ] Push the focused branch and attach its PR. Inspect the native job's exact stage and evidence; merge only after its required checks pass.
-- [ ] Update roadmap/receipts only for requirements actually proven by the real native run.
+- [x] Push the focused branch and attach PR #10; inspect the successful native job's exact stage and evidence.
+- [ ] Merge after the final commit's required checks pass.
+- [x] Update roadmap/receipts only for requirements actually proven by the real native run.
 
-Review findings fixed before the first Windows run: extract the root-layout ZIP into a dedicated extension directory; authenticate the synthetic receiver and compare every stored setting/approval using the production approval predicate; wait for the owned process exit, kill only its process tree on timeout, and remove its temporary profile. Windows execution is still pending.
+Review findings fixed before the first Windows run: extract the root-layout ZIP into a dedicated extension directory; authenticate the synthetic receiver and compare every stored setting/approval using the production approval predicate; wait for the owned process exit, kill only its process tree on timeout, and remove its temporary profile. [Windows run 37204759247](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37204759247) passed on Windows Server 2022 with Chrome 154.0.8037.58, runtime extension 0.5.0. The public sanitized receipt records native consent, grant, reload/settings/approval preservation, revocation and owned profile cleanup. Production activation, actual-site recovery, macOS native consent/revocation and external adoption/maintenance remain pending.
