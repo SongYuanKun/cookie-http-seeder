@@ -67,11 +67,11 @@
 
 **Interfaces:** 现有`Observation/Response/RequestOutcome/ResponseRules/CookieConsumer`兼容导出；`CookieConsumer.status()`提供只读安全状态；CLI `consume/consumer-status/consumer-flush`。
 
-- [ ] 写v1→v2迁移保留blocked_version、16条outbox、每条3次预算、pending invalid不被新请求覆盖测试。
-- [ ] 写配置/鉴权终止错误blocked、旧版本反馈discarded、磁盘异常和重启锁、安全CLI退出码/无正文输出测试；consumer-status在无Token/只读目录下不联网、不读Cookie、不创建文件。
-- [ ] 运行 `python -m pytest tests/test_consumer_outbox.py tests/test_consumer_cli.py` 确认失败。
-- [ ] 分离分类/持久化/编排；实现标准库传输、1MiB限制、无重定向、有界等待及明确exit 0/1/2/3/4。
-- [ ] 运行新测试、现有consumer与两个examples测试；更新正式接入示例；提交。
+- [x] 写v1→v2迁移保留blocked_version、16条outbox、每条3次预算、pending invalid不被新请求覆盖测试。
+- [x] 写配置/鉴权终止错误blocked、旧版本反馈discarded、磁盘异常和重启锁、安全CLI退出码/无正文输出测试；consumer-status在无Token/只读目录下不联网、不读Cookie、不创建文件。
+- [x] 运行 `python -m pytest tests/test_consumer_outbox.py tests/test_consumer_cli.py` 确认失败。
+- [x] 分离分类/持久化/编排；实现标准库传输、1MiB限制、无重定向、有界等待及明确exit 0/1/2/3/4。
+- [x] 运行新测试、现有consumer与两个examples测试；更新正式接入示例；提交。
 
 ## Task 5：扩展模块边界、统一dashboard与健康上报
 

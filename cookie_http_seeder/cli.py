@@ -41,6 +41,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sources", type=Path, default=None,
                         help="managed sources JSON; UI edits persist to this file")
     sub = parser.add_subparsers(dest="command", required=True)
+    from .consumer_cli import add_commands
+    add_commands(sub)
     sub.add_parser("init-token", help="create cookie-receiver.token if missing")
     sub.add_parser("paths", help="print resolved data paths")
     sub.add_parser("senders", help="list initialized sender labels (no credentials)")
@@ -104,6 +106,9 @@ def _paths_document(data_dir: Path) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     data_dir = args.data_dir or default_data_dir()
+    if args.command in {"consume", "consumer-status", "consumer-flush"}:
+        from .consumer_cli import run
+        return run(args, data_dir)
     if args.command == "senders":
         print(json.dumps({"senders": list_sender_tags(data_dir)}, indent=2))
         return 0
