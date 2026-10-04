@@ -148,7 +148,7 @@ export async function approveSources(doc, names = Object.keys(doc.sources)) {
 }
 export function sourceApproved(settings, source, spec) {
   const scope = value => Object.fromEntries(Object.entries(value || {}).filter(([key]) =>
-    !["stale_after_seconds", "validation_ttl_seconds"].includes(key)));
+    !["stale_after_seconds", "validation_ttl_seconds"].includes(key)).sort(([a], [b]) => a.localeCompare(b)));
   return !!settings.connectionId && settings.approvedConnectionId === settings.connectionId &&
     Object.hasOwn(settings.approvedSources, source) &&
     JSON.stringify(scope(settings.approvedSources[source])) === JSON.stringify(scope(spec));

@@ -30,6 +30,12 @@ test("threshold-only updates retain local domain consent", () => {
   assert.equal(sourceApproved(settings, "site", { ...old, stale_after_seconds: 300 }), true);
   assert.equal(sourceApproved(settings, "site", { ...old, domains: ["other.test"] }), false);
 });
+test("Chrome storage property ordering does not revoke unchanged source consent", () => {
+  const approved = { domains: ["example.test"], enabled: true, label: "site", target_url: "" };
+  const remote = { label: "site", domains: ["example.test"], target_url: "", enabled: true };
+  assert.equal(sourceApproved({ connectionId: "saved", approvedConnectionId: "saved",
+    approvedSources: { site: approved } }, "site", remote), true);
+});
 for (const field of ["recoveryProbeMinutes", "loginPollMinutes"]) {
   test(`${field} defaults off and saves without invalidating authorization`, async () => {
     assert.equal((await loadSettings())[field], 0);

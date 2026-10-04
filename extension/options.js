@@ -1,15 +1,23 @@
 import {
   approveSources, configExport, configImport, endpointURL, fetchSources, loadSettings,
-  normalizeSources, receiverRequest, saveSettings, sourceApproved, sourceOrigins,
+  normalizeSources, receiverRequest, saveSettings, sourceOrigins,
 } from "./shared.js";
 import { cachedSourceDocument, revokeLocalSource } from "./access.js";
-import { sourceStatus } from "./source_status.js";
+import { DashboardView, sourceText } from "./dashboard_view.js";
 import { senderSummary } from "./sender_summary.js";
 import { displayTimes, formatLocalTime, localTimeZone } from "./time.js";
 const $ = id => document.getElementById(id);
+const dashboard = new DashboardView({ document, root: $("health-dashboard"), onRender: renderDashboardRows });
 let doc = null, connection = null, imported = null, busy = false;
 const statusCells = new Map();
 let statusGeneration = 0;
+function renderDashboardRows(result) {
+  for (const [name, cell] of statusCells) {
+    const row = result?.sources?.[name];
+    cell.textContent = row ? sourceText(row) : "状态不可用或来源已变更，请重新加载配置";
+    cell.className = `source-status ${row?.snapshot?.validation === "valid" ? "ok" : "attention"}`;
+  }
+}
 const show = (text, error = false) => { $("status").textContent = text; $("status").className = error ? "error" : "ok"; };
 // Start synchronously: permissions.request must run inside the user's click gesture.
 function action(fn) {
@@ -134,7 +142,8 @@ $("connection-form").addEventListener("submit", action(async () => {
   const patch = { endpoint, senderTag: $("sender-tag").value.trim(), token: $("token").value.trim(),
     autoPushMinutes: Number($("autoPushMinutes").value), syncOnChange: $("syncOnChange").checked,
     recoveryProbeMinutes: Number($("recoveryProbeMinutes").value),
-    loginPollMinutes: Number($("loginPollMinutes").value) };
+    loginPollMinutes: Number($("loginPollMinutes").value),
+    healthReportMinutes: Number($("healthReportMinutes").value) };
   const origins = [`${new URL(endpoint).protocol}//${new URL(endpoint).hostname}/*`];
   if (!await chrome.permissions.request({ origins })) throw new Error("未授权接收端地址");
   await saveSettings(patch);
@@ -192,27 +201,15 @@ loadSettings().then(settings => {
   $("autoPushMinutes").value = settings.autoPushMinutes;
   $("recoveryProbeMinutes").value = settings.recoveryProbeMinutes;
   $("loginPollMinutes").value = settings.loginPollMinutes;
+  $("healthReportMinutes").value = settings.healthReportMinutes;
   $("client-version").textContent = `插件客户端版本：${chrome.runtime.getManifest().version}`;
   $("syncOnChange").checked = settings.syncOnChange;
   if (settings.token && settings.connectionId) return reload();
 }).catch(error => show(error.message, true));
 
 $("diagnose").addEventListener("click", action(async () => {
-  const settings = await loadSettings();
-  const queue = await chrome.runtime.sendMessage({ type: "sync-status" });
-  let remote;
-  try { remote = await receiverRequest(settings, "/v1/status"); }
-  catch (error) { remote = { ok: false, code: error.code || "connection_failed" }; }
-  const permissions = {};
-  for (const [name, spec] of Object.entries(settings.approvedSources || {})) {
-    permissions[name] = await chrome.permissions.contains({ origins: sourceOrigins(spec) });
-  }
-  // Do not include the settings object: it contains the receiver token.
-  $("diagnostics").textContent = `当地时间（${localTimeZone()}，YYYY-MM-DD HH:mm:ss）\n` +
-    JSON.stringify(displayTimes({
-      sender_tag: settings.senderTag, connection: remote.ok ? "authenticated" : remote.code,
-      permissions, queue: queue?.queue?.jobs || {}, sources: remote.sources || {},
-    }), null, 2);
+  const result = await dashboard.refresh();
+  $("diagnostics").textContent = JSON.stringify(displayTimes(result || { ok: false }), null, 2);
 }));
 
 async function checkConnection() {
@@ -231,33 +228,18 @@ async function refreshStatuses() {
     return;
   }
   for (const cell of statusCells.values()) cell.textContent = "正在刷新状态…";
-  const [queue, remote, permissions] = await Promise.all([
-    chrome.runtime.sendMessage({ type: "sync-status" }).catch(() => ({ ok: false })),
-    receiverRequest(settings, "/v1/status").catch(() => ({ ok: false })),
-    Promise.all(Object.entries(requestedDoc.sources).map(async ([name, spec]) => {
-      let granted = false;
-      try { granted = await chrome.permissions.contains({ origins: sourceOrigins(spec) }); } catch { /* unavailable */ }
-      return [name, granted];
-    })),
-  ]);
+  const result = await dashboard.refresh();
   const current = await loadSettings();
   if (generation !== statusGeneration || doc !== requestedDoc) return;
   if (current.connectionId !== settings.connectionId) {
     for (const cell of statusCells.values()) cell.textContent = "连接已变更，请重新加载配置";
     return;
   }
-  const grants = Object.fromEntries(permissions);
-  const changed = remote.ok && remote.config_revision !== requestedDoc.revision;
-  for (const [name, spec] of Object.entries(requestedDoc.sources)) {
-    const summary = sourceStatus(spec, {
-      approved: sourceApproved(current, name, spec), permission: grants[name],
-      job: queue?.queue?.jobs?.[name], queueAvailable: queue?.ok === true,
-      remote: remote?.sources?.[name], remoteAvailable: remote.ok === true && !changed,
-    });
-    const cell = statusCells.get(name);
+  for (const name of Object.keys(requestedDoc.sources)) {
+    const cell = statusCells.get(name), row = result?.sources?.[name];
     if (!cell) continue;
-    cell.textContent = changed ? "接收端配置已变更，请重新加载配置\n" + summary.text : summary.text;
-    cell.className = `source-status ${summary.warning || changed ? "attention" : "ok"}`;
+    cell.textContent = row ? sourceText(row) : "状态不可用或来源已变更，请重新加载配置";
+    cell.className = `source-status ${row?.snapshot?.validation === "valid" ? "ok" : "attention"}`;
   }
   $("status-updated").textContent = `状态查询时间：${formatLocalTime(Date.now())}（${localTimeZone()}）。登录有效性仅代表爬虫最近一次报告。`;
 }
@@ -278,3 +260,5 @@ $("refresh-senders").addEventListener("click", action(async () => {
     throw error;
   }
 }));
+
+$("refresh-dashboard").addEventListener("click", action(() => dashboard.refresh()));
