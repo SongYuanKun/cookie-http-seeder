@@ -1,0 +1,44 @@
+name: Native Windows Chrome
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/native-browser.yml
+      - scripts/native_browser_acceptance.mjs
+      - scripts/windows_native_consent.ps1
+jobs:
+  native-windows:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download and verify the published extension
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $nativeAssets = Join-Path $env:RUNNER_TEMP 'cookie-native-release'
+          New-Item -ItemType Directory -Path $nativeAssets | Out-Null
+          gh release download v0.5.0 --repo SongYuanKun/cookie-http-seeder --pattern 'cookie-http-seeder-extension-0.5.0.zip' --pattern SHA256SUMS --dir $nativeAssets
+          if ($LASTEXITCODE -ne 0) { throw 'release_download_failed' }
+          $nativeZip = Join-Path $nativeAssets 'cookie-http-seeder-extension-0.5.0.zip'
+          $nativeHash = (Get-FileHash -Algorithm SHA256 $nativeZip).Hash.ToLowerInvariant()
+          $nativeExpected = '8fb0608719253a13a2c1a07c4e668a223ce0cb3cb0e8e3782ef1ec97b0003b65'
+          $nativeChecksum = Get-Content (Join-Path $nativeAssets 'SHA256SUMS') | Where-Object { $_ -match '  cookie-http-seeder-extension-0\.5\.0\.zip$' }
+          if ($nativeHash -ne $nativeExpected -or $nativeChecksum -ne "$nativeExpected  cookie-http-seeder-extension-0.5.0.zip") { throw 'release_checksum_mismatch' }
+          $nativeExtension = Join-Path $nativeAssets 'extension'
+          Expand-Archive -Path $nativeZip -DestinationPath $nativeExtension
+          if (-not (Test-Path (Join-Path $nativeExtension 'manifest.json'))) { throw 'release_layout_mismatch' }
+          "NATIVE_EXTENSION_PATH=$nativeExtension" >> $env:GITHUB_ENV
+          "NATIVE_REPORT_PATH=$(Join-Path $nativeAssets 'native-acceptance.json')" >> $env:GITHUB_ENV
+      - name: Run actual headed Chrome permission, reload and revocation acceptance
+        shell: pwsh
+        run: node scripts/native_browser_acceptance.mjs
