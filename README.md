@@ -9,10 +9,11 @@
 消费者按实际请求 URL 选择适用 Cookie。不自动登录、不处理验证码、不复制完整浏览器会话。
 登录是否有效由爬虫按站点规则反馈，不能由“同步成功”推断。
 
-当前代码版本为 **0.4.0**，包含结构化快照、可靠同步、发送端标签、爬虫消费/反馈/暂停恢复、
-按来源配置的新鲜度与反馈时效、全标签概览，以及可选的浏览器提醒和低频故障恢复。
-功能支持仍通过能力协商判断；标签检查 `sender_tags`，概览检查 `sender_status_summary`，
-阈值检查 `source_thresholds`。变更记录见 [CHANGELOG](CHANGELOG.md)。
+当前代码版本为 **0.5.0**：客户端健康上报、持久登录恢复事件、正式爬虫 CLI、
+版本化反馈 outbox、统一 Options/Popup 面板，以及后端和扩展的模块拆分。
+`client_health` 与 `source_incidents` 通过能力协商启用，旧接收端显示升级指引；
+新心跳默认关闭。见 [变更记录](CHANGELOG.md)、[完整 API](docs/api.md)、
+[爬虫接入](docs/consumer-recovery.md) 和 [原路径升级](docs/client-upgrade.md)。
 
 ```text
 家用 Chrome（标签 home-pc） ─┐
@@ -73,6 +74,8 @@ data/
   sources.json                         # default 配置；首次管理前可能尚未落盘
   beike-cookies.json                   # default 的旧路径
   .beike-sync.json
+  .client-health.json                  # 安全客户端元数据
+  .incidents.json                      # 登录/核验/同步事件与有界历史
   senders/
     home-pc/
       sources.json
@@ -90,6 +93,24 @@ data/
 
 切换标签会使旧本机授权和旧队列失效，需要重新授权；不改名、迁移或删除旧标签数据。
 读取缺失标签不回退到 default 或其他发送端。详情见 [发送端标签](docs/sender-tags.md)。
+
+## 正式爬虫命令
+
+```bash
+cookie-http-seeder --data-dir ./data consume mysite --sender-tag home-pc \
+  --url https://example.com/account --rules /private/mysite-rules.json \
+  --endpoint http://127.0.0.1:18765 --state-path /private/mysite-consumer.json
+cookie-http-seeder --data-dir ./data consumer-status mysite --sender-tag home-pc \
+  --state-path /private/mysite-consumer.json
+cookie-http-seeder --data-dir ./data consumer-flush mysite --sender-tag home-pc \
+  --state-path /private/mysite-consumer.json
+```
+
+`consumer-status` 是无需 Token 的本地只读查询。请求不跟随重定向，响应限 1 MiB；
+退出码 0=有效、2=凭据不可用、3=需登录或等待超时、4=验证异常、1=配置或运行错误。
+配置明确的站点响应规则，只有新版本被实际验证为 valid 才恢复失效任务。
+状态文件 schema1 可迁移到 schema2；保留暂停，反馈最多16条，每版本最多3次尝试。
+[完整接入和恢复说明](docs/consumer-recovery.md) 包括等待、队列及事件处置。
 
 ## 消费快照与反馈
 
@@ -163,6 +184,10 @@ cookie-http-seeder --data-dir ./data doctor --sender-tag home-pc
 cookie-http-seeder --data-dir ./data status --sender-tag home-pc --json
 python examples/consume_cookies.py beike --data-dir ./data --sender-tag home-pc
 ```
+
+`doctor`区分当前运行代码、实际安装分发与接收端版本，并给出能力、来源阈值、健康、
+事件和受控下一步。checkout的egg-info不作为生产安装证据；JSON使用`--json`保留机器时间。
+诊断字段与枚举见[元数据协议](docs/api.md#doctor诊断)。
 
 `senders` 枚举本地已初始化标签，不表示接收端联网状态或登录验证结果。
 `serve`、`init-token`、`paths`、`notify-needed` 不接受 `--sender-tag`；一个接收进程管理全部标签，

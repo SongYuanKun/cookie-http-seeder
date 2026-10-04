@@ -41,6 +41,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--sources", type=Path, default=None,
                         help="managed sources JSON; UI edits persist to this file")
     sub = parser.add_subparsers(dest="command", required=True)
+    from .consumer_cli import add_commands
+    add_commands(sub)
     sub.add_parser("init-token", help="create cookie-receiver.token if missing")
     sub.add_parser("paths", help="print resolved data paths")
     sub.add_parser("senders", help="list initialized sender labels (no credentials)")
@@ -74,6 +76,16 @@ def _build_parser() -> argparse.ArgumentParser:
     report.add_argument("--reason-code", required=True)
     report.add_argument("--endpoint", default="http://127.0.0.1:18765")
     report.add_argument("--token-file", type=Path, default=None)
+    incidents = sub.add_parser("incidents", help="read incident metadata from the receiver")
+    action = sub.add_parser("incident-action", help="acknowledge, snooze or reopen an incident")
+    action.add_argument("source")
+    action.add_argument("--incident-id", required=True)
+    action.add_argument("--action", choices=["acknowledge", "snooze", "reopen"], required=True)
+    action.add_argument("--duration-seconds", type=int)
+    for command in (incidents, action):
+        command.add_argument("--endpoint", default="http://127.0.0.1:18765")
+        command.add_argument("--token-file", type=Path)
+        command.add_argument("--sender-tag", type=sender_tag, default="default")
     for command in (status, doctor, report, header):
         command.add_argument("--sender-tag", type=sender_tag, default="default",
                              help="select one sender label; default keeps legacy storage")
@@ -94,6 +106,9 @@ def _paths_document(data_dir: Path) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     data_dir = args.data_dir or default_data_dir()
+    if args.command in {"consume", "consumer-status", "consumer-flush"}:
+        from .consumer_cli import run
+        return run(args, data_dir)
     if args.command == "senders":
         print(json.dumps({"senders": list_sender_tags(data_dir)}, indent=2))
         return 0
@@ -125,6 +140,25 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(doc if args.raw_json else display_times(doc),
                          ensure_ascii=False, indent=2))
         return 0 if doc["ok"] else 1
+    if args.command in {"incidents", "incident-action"}:
+        from .client import ClientError, ReceiverClient
+        try:
+            token = resolve_token(token=os.environ.get(ENV_TOKEN),
+                                  token_file=args.token_file or token_file(data_dir))
+            client = ReceiverClient(args.endpoint, token, sender_tag=args.sender_tag)
+            payload = None
+            path = "/v1/incidents"
+            if args.command == "incident-action":
+                path += "/" + args.source
+                payload = {"incident_id": args.incident_id, "action": args.action}
+                if args.duration_seconds is not None:
+                    payload["duration_seconds"] = args.duration_seconds
+            result = client.request(path, payload=payload)
+        except (OSError, ValueError, SystemExit, ClientError):
+            print(json.dumps({"ok": False, "error": "incident_request_failed"}))
+            return 1
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     if args.command == "report":
         from .client import ClientError, ReceiverClient
         try:

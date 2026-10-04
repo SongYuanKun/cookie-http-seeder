@@ -59,17 +59,24 @@ test("popup renders full local dates without changing retry state", async () => 
   const job = { phase: "retrying", attempts: 1,
     nextAt: Date.parse("2026-09-21T00:49:34Z"), lastSuccessAt: Date.parse("2026-09-20T00:49:34Z") };
   const before = JSON.stringify(job);
-  globalThis.document = { getElementById(id) {
-    if (!elements.has(id)) elements.set(id, { textContent: "", addEventListener() {} });
+  const element = () => ({ textContent: "", children: [], addEventListener() {},
+    append(...children) { this.children.push(...children); },
+    replaceChildren() { this.children = []; this.textContent = ""; } });
+  globalThis.document = { createElement: element, getElementById(id) {
+    if (!elements.has(id)) elements.set(id, element());
     return elements.get(id);
   } };
   globalThis.chrome = { runtime: {
-    sendMessage: async () => ({ ok: true, queue: { jobs: { site: job } } }), openOptionsPage() {},
+    sendMessage: async () => ({ ok: true, connection: "connected", capabilities: [],
+      clientHealth: { state: "not_reported" }, sources: { site: { source: "site", enabled: true,
+        approved: true, permission_granted: true, sync: job, snapshot: { validation: "unverified" },
+        actions: [], incidents: [] } } }), openOptionsPage() {},
   }, storage: { onChanged: { addListener() {} } } };
   try {
     await import("../extension/popup.js?time-display-test");
     await new Promise(resolve => setImmediate(resolve));
-    const rendered = elements.get("status").textContent;
+    const texts = node => [node.textContent, ...node.children.map(texts)].join("\n");
+    const rendered = texts(elements.get("health-dashboard"));
     assert.ok(rendered.includes(`计划重试：${formatLocalTime(job.nextAt)}`));
     assert.ok(rendered.includes(`上次成功：${formatLocalTime(job.lastSuccessAt)}`));
     assert.ok(rendered.includes(localTimeZone()));

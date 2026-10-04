@@ -181,3 +181,7 @@ systemd 可在 drop-in 的 `[Service]` 中设置 `Environment=TZ=Asia/Shanghai` 
 防止重复使用已确认失效的版本。见 [爬虫接入](consumer-recovery.md)。
 浏览器的低频恢复探测和登录状态提醒均默认关闭；需要时显式启用。
 安装包构建、保留设置和核验步骤见 [客户端升级](client-upgrade.md)。
+
+## 0.5 升级
+
+先保存旧wheel、运行配置和数据，再原地安装0.5 wheel并按原服务方式重启；校验实际解释器的版本、鉴权capabilities及快照保留。新心跳/事件只增加受限元数据文件；consumer schema1→2与扩展原路径更新见[升级指南](client-upgrade.md)。生产安装、重启、客户端操作按实际目标取得批准。

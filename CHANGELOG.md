@@ -1,7 +1,38 @@
 # Changelog
 
 重要变更记录。`Unreleased` 表示已进入代码但未在此声明独立发布的变更；
-当前 Python 包和扩展元数据为 `0.4.0`；版本号不代表已有公开 Release 或实际部署。
+当前 Python 包和扩展元数据为 `0.5.0`；版本号不代表已有公开 Release 或实际部署。
+
+## [0.5.0]
+
+### Added
+
+- 按标签保存的客户端健康 API/心跳，默认关闭；服务器收报时间计算 recent/overdue。
+- 持久登录失效、反馈过期、长期未同步事件；确认/静默/重新提醒，不伪造登录恢复。
+- 正式 `consume`、`consumer-status`、`consumer-flush`；schema1→2迁移、有界反馈outbox及终止错误blocked。
+- 统一 Options/Popup dashboard、明确的来源登录入口和能力降级指引。
+- doctor区分运行/实际安装/接收端版本，提供能力、独立阈值、健康/事件及受控下一步。
+- 真实Chrome149临时profile升级、原生授权、worker alarm和爬虫恢复闭环验收。
+
+### Changed
+
+- 接收端拆为领域状态、HTTP和生命周期；允许显式state，多实例不依赖全局配置。
+- 消费者拆为响应规则、持久化、请求编排与CLI；扩展拆分设置、协议、Cookie采集和面板。
+- 可选权限声明规范为等价的HTTP+HTTPS通配scheme，实际申请仍逐来源限定域名。
+
+### Fixed
+
+- Chrome storage字段重排导致旧JSON字符串授权比较误判；现在按规范字段顺序比较。
+- 新Chrome HTML pattern要求连字符转义。
+- 断连/配置变更/晚到请求不沿用旧有效结论；确认/静默同时抑制接收端与浏览器提醒。
+- 来源离线变更后重启使旧元数据失效；损坏健康/事件文件不再阻止删除来源。
+- 同一未恢复事件保留确认/静默；HTTP429从队列到心跳保持rate_limited分类。
+
+### Compatibility
+
+- 保留公开Python导入、V2/CAS、default/标签目录、Token、来源授权和旧扩展队列。
+- 新版本推送只进入awaiting_validation，实际不同版本valid反馈才关闭登录失效事件。
+- 必须原路径更新并显式重新加载扩展，保留profile；不会自动开启心跳或自动登录。
 
 ## [0.4.0]
 

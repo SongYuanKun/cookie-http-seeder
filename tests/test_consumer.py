@@ -283,15 +283,15 @@ def test_malformed_persisted_consumer_state_fails_closed(setup):
         consumer.request("https://example.test/me", lambda *_: pytest.fail("no request"))
 
 
-@pytest.mark.parametrize("mutation", ["missing_blocked", "missing_pending", "extra_field"])
+@pytest.mark.parametrize("mutation", ["missing_blocked", "missing_outbox", "extra_field"])
 def test_incomplete_or_extra_consumer_state_stops_before_sending(setup, mutation):
     state, _, consumer = setup
     seed(state)
     saved = consumer._load()
     if mutation == "missing_blocked":
         del saved["blocked_version"]
-    elif mutation == "missing_pending":
-        del saved["pending_feedback"]
+    elif mutation == "missing_outbox":
+        del saved["outbox"]
     else:
         saved["unexpected"] = "synthetic-should-not-persist"
     consumer.state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -317,7 +317,7 @@ def test_snapshot_read_failure_after_invalid_response_keeps_durable_pause(setup,
         consumer.request("https://example.test/me", lambda *_: pytest.fail("must remain paused"))
 
 
-@pytest.mark.parametrize("field", ["blocked_version", "pending_feedback"])
+@pytest.mark.parametrize("field", ["blocked_version", "outbox"])
 def test_numeric_snapshot_version_in_consumer_state_fails_closed(setup, field):
     state, _, consumer = setup
     seed(state)
@@ -326,8 +326,9 @@ def test_numeric_snapshot_version_in_consumer_state_fails_closed(setup, field):
     if field == "blocked_version":
         saved[field] = numeric_version
     else:
-        saved[field] = {"source": "site", "snapshot_version": numeric_version,
-                        "result": "invalid", "reason_code": "login_required"}
+        saved[field] = [{"source": "site", "snapshot_version": numeric_version,
+                         "result": "invalid", "reason_code": "login_required",
+                         "attempts": 0, "status": "pending"}]
     consumer.state_path.parent.mkdir(parents=True, exist_ok=True)
     consumer.state_path.write_text(json.dumps(saved))
     with pytest.raises(ValueError):

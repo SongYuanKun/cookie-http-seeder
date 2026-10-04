@@ -1,7 +1,7 @@
 name: CI
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main, "feat/**", "codex/**"]
   pull_request:
     branches: [main]
 jobs:
@@ -42,4 +42,18 @@ jobs:
         with:
           name: cookie-http-seeder-extension
           path: dist/cookie-http-seeder-extension-*.zip
+          if-no-files-found: error
+      - name: Import installed wheel outside checkout
+        if: matrix.python-version == '3.11'
+        run: |
+          python -m venv /tmp/seeder-wheel-check
+          /tmp/seeder-wheel-check/bin/pip install --no-deps dist/cookie_http_seeder-*.whl
+          cd /tmp
+          /tmp/seeder-wheel-check/bin/python -I -c "from cookie_http_seeder import __version__; from cookie_http_seeder.receiver import ReceiverState; from cookie_http_seeder.consumer_cli import send_request; assert __version__ == '0.5.0'"
+      - name: Upload Python wheel
+        if: matrix.python-version == '3.11'
+        uses: actions/upload-artifact@v4
+        with:
+          name: cookie-http-seeder-wheel
+          path: dist/cookie_http_seeder-*.whl
           if-no-files-found: error

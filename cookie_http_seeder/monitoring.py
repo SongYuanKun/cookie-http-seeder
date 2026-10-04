@@ -15,11 +15,8 @@ class StaleMonitor:
         self._thread: threading.Thread | None = None
 
     def scan(self) -> list[dict]:
-        if not self.enabled:
-            return []
         path = resolve_webhook_path(data_dir=self.root.data_dir)
-        if path is None or not path.is_file():
-            return []  # No notification attempt: do not consume the cooldown.
+        can_notify = self.enabled and path is not None and path.is_file()
         results = []
         for tag, state in self.root.initialized_states():
             if self._stop.is_set():
@@ -34,9 +31,13 @@ class StaleMonitor:
                         spec = state.sources.get(source)
                         if not spec or not spec["enabled"]:
                             continue
+                        state.observe_incidents(source)
+                        if not can_notify:
+                            continue
                         status = state.sync.status(
                             source, stale_after=spec.get("stale_after_seconds", 86400))
                         if (status["freshness"] != "stale"
+                                or not state.incidents.may_notify(source, "snapshot_stale")
                                 or not state.sync.reserve_stale_notification(source)):
                             continue
                     result = self.notifier(reason=f"{tag}/{source}: snapshot_stale",
@@ -56,7 +57,7 @@ class StaleMonitor:
             self._stop.wait(self.interval)
 
     def start(self) -> None:
-        if self.enabled and self._thread is None:
+        if self._thread is None:
             self._thread = threading.Thread(target=self._run, name="snapshot-stale-monitor",
                                             daemon=True)
             self._thread.start()

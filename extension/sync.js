@@ -10,13 +10,13 @@ export const MAX_ATTEMPTS = 5;
 export const DEBOUNCE_MS = 30_000;
 const PENDING = new Set(["pending", "retrying", "syncing"]);
 const RECOVERABLE = new Set(["network_error", "server_unavailable", "collection_failed",
-  "snapshot_conflict", "worker_interrupted"]);
+  "snapshot_conflict", "worker_interrupted", "rate_limited"]);
 function recoveryDelay(settings) {
   const minutes = settings.recoveryProbeMinutes;
   return Number.isInteger(minutes) && minutes >= 15 && minutes <= 10080 ? minutes * 60_000 : 0;
 }
 const SAFE_CODES = new Set([
-  "network_error", "server_unavailable", "collection_failed", "snapshot_conflict",
+  "network_error", "server_unavailable", "collection_failed", "snapshot_conflict", "rate_limited",
   "invalid_token", "unauthorized", "forbidden", "not_found", "upgrade_required",
   "configuration_changed", "approval_required", "permission_required", "unsupported_cookies",
   "invalid_payload", "invalid_response", "request_rejected", "operation_failed", "worker_interrupted",

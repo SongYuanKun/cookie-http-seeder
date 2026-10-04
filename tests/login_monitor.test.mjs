@@ -42,6 +42,16 @@ test("same invalid version is deduplicated across worker restarts", async () => 
   assert.equal((await monitor.check()).notified, 0);
   assert.equal(notifications.length, 1);
 });
+test("acknowledged and snoozed server incidents suppress browser reminders", async () => {
+  remote.incidents = { ok: true, active: [{ source: "site", kind: "login_invalid",
+    status: "acknowledged", acknowledged: true, snoozed_until: null }] };
+  assert.equal((await monitor.check()).notified, 0);
+  remote.incidents.active[0] = { source: "site", kind: "login_invalid", status: "snoozed",
+    snoozed_until: new Date(clock + 60000).toISOString() };
+  assert.equal((await monitor.check()).notified, 0);
+  clock += 60001;
+  assert.equal((await monitor.check()).notified, 1);
+});
 test("new invalid snapshot can notify after per-source cooldown", async () => {
   await monitor.check();
   remote.sources.site.snapshot_version = "b".repeat(32);

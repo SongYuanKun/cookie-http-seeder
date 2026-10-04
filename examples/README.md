@@ -61,3 +61,5 @@ credentials = load_request_credentials(
 
 完整接入使用 [爬虫接入指南](../docs/consumer-recovery.md) 的 `crawl_with_feedback.py` 命令。
 规则模板使用虚构业务字段，不代表贝壳或其他站点的真实协议。
+
+正式生产接入优先使用0.5 `cookie-http-seeder consume/consumer-status/consumer-flush`，见[消费者指南](../docs/consumer-recovery.md)。本目录旧脚本保持兼容，退出码与正式CLI分别定义。
