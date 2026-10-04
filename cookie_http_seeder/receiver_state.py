@@ -33,8 +33,8 @@ class ReceiverState:
         self.sources_path = sources_path or self.data_dir / "sources.json"
         self.lock = threading.RLock()
         self.sync = SyncState(self.data_dir)
-        self.client_health = ClientHealthStore(self.data_dir)
-        self.incidents = IncidentStore(self.data_dir)
+        self.client_health = ClientHealthStore(self.data_dir, sources=lambda: self.sources)
+        self.incidents = IncidentStore(self.data_dir, sources=lambda: self.sources)
         # Fresh on every boot and config write; avoids the content-hash ABA problem.
         self.revision = secrets.token_hex(16)
         self.notify_timer: threading.Timer | None = None
@@ -263,4 +263,3 @@ class ReceiverState:
             summaries[tag] = (state.status() if state is not None else
                               {"ok": False, "error": "unreadable_sender_state"})
         return {"ok": True, "senders": summaries, "observedAt": _utc_now()}
-

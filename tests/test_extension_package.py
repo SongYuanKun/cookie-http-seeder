@@ -32,15 +32,17 @@ def test_build_complete_versioned_client_without_extra_sensitive_files(tmp_path)
     with zipfile.ZipFile(archive) as package:
         names = set(package.namelist())
         manifest = json.loads(package.read("manifest.json"))
-        assert manifest["version"] == __version__ == metadata["project"]["version"] == "0.4.0"
+        assert manifest["version"] == __version__ == metadata["project"]["version"] == "0.5.0"
         assert {"login_monitor.js", "sender_summary.js", "background.js", "options.js",
-                "options.html", "popup.html", "settings_lock.js", "icons/icon128.png"} <= names
+                "options.html", "popup.html", "settings_lock.js", "icons/icon128.png",
+                "settings.js", "receiver_client.js", "cookie_collector.js", "dashboard.js",
+                "runtime_controller.js", "health_reporter.js", "dashboard_view.js"} <= names
         assert "cookie-receiver.token" not in names
         assert "cookies.json" not in names
         assert "unreferenced-debug.js" not in names
         assert all(not name.startswith("/") and ".." not in Path(name).parts for name in names)
         assert package.testzip() is None
-    assert archive.name == "cookie-http-seeder-extension-0.4.0.zip"
+    assert archive.name == "cookie-http-seeder-extension-0.5.0.zip"
     original = archive.read_bytes()
     assert build_extension(source, tmp_path / "second-dist").read_bytes() == original
 

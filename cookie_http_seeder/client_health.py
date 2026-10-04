@@ -7,6 +7,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .metadata_policy import scope_fingerprints, validate_fingerprints
 from .paths import atomic_write_text
 from .sync_state import utc_at
 
@@ -57,14 +58,15 @@ def _validate(payload, sources, now):
 
 
 class ClientHealthStore:
-    def __init__(self, data_dir: Path, clock=time.time):
+    def __init__(self, data_dir: Path, clock=time.time, *, sources=None):
         self.path = data_dir / ".client-health.json"
         self.clock = clock
+        self.sources = sources
 
     def accept(self, payload, sources) -> dict:
         now = self.clock()
         doc = _validate(payload, sources, now)
-        self._write({**doc, "received_at": now})
+        self._write({**doc, "received_at": now, "source_policies": scope_fingerprints(sources)})
         return self.status()
 
     def _write(self, doc):
@@ -77,23 +79,35 @@ class ClientHealthStore:
         if not isinstance(doc, dict) or "received_at" not in doc:
             raise ValueError("invalid health state")
         received = doc.pop("received_at")
+        policies = validate_fingerprints(doc.pop("source_policies", {}))
         if type(received) not in {int, float} or not 0 <= received <= self.clock():
             raise ValueError("invalid receipt time")
         _validate(doc, doc.get("sources", {}), received)
-        return doc, received
+        return doc, received, policies
 
     def forget(self, names) -> None:
         if not self.path.exists():
             return
-        doc, received = self._read()
+        try:
+            doc, received, policies = self._read()
+        except (OSError, ValueError, TypeError, OverflowError):
+            # Corruption remains visible, but cannot prevent narrowing authorization.
+            return
         doc["sources"] = {k: v for k, v in doc["sources"].items() if k not in names}
-        self._write({**doc, "received_at": received})
+        policies = {k: v for k, v in policies.items() if k not in names}
+        self._write({**doc, "received_at": received, "source_policies": policies})
 
     def status(self) -> dict:
         if not self.path.exists():
             return {"ok": True, "state": "not_reported", "sources": {}}
         try:
-            doc, received = self._read()
+            doc, received, policies = self._read()
+            if self.sources is not None:
+                current = scope_fingerprints(self.sources())
+                doc["sources"] = {name: entry for name, entry in doc["sources"].items()
+                                  if name in current and policies.get(name) == current[name]}
+                if policies != current and not doc["sources"]:
+                    return {"ok": True, "state": "not_reported", "sources": {}}
             age = max(0, int(self.clock() - received))
             return {"ok": True, "state": ("overdue" if age >
                     2 * doc["interval_minutes"] * 60 + 300 else "recent"),

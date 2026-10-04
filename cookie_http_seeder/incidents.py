@@ -7,6 +7,7 @@ import secrets
 import time
 from pathlib import Path
 
+from .metadata_policy import scope_fingerprints, validate_fingerprints
 from .paths import atomic_write_text
 from .sync_state import VERSION, utc_at
 
@@ -19,17 +20,20 @@ FIELDS = {"incident_id", "source", "kind", "snapshot_version", "status", "reason
 
 
 class IncidentStore:
-    def __init__(self, data_dir: Path, clock=time.time):
+    def __init__(self, data_dir: Path, clock=time.time, *, sources=None):
         self.path = data_dir / ".incidents.json"
         self.clock = clock
+        self.sources = sources
 
     def _load(self):
         if not self.path.exists():
-            return {"schema_version": 1, "active": [], "history": []}
+            return {"schema_version": 1, "active": [], "history": [], "source_policies": {}}
         if self.path.is_symlink() or self.path.stat().st_size > 1024 * 1024:
             raise ValueError("invalid incident file")
         doc = json.loads(self.path.read_text(encoding="utf-8"))
-        if (not isinstance(doc, dict) or set(doc) != {"schema_version", "active", "history"}
+        if (not isinstance(doc, dict) or set(doc) not in (
+                {"schema_version", "active", "history"},
+                {"schema_version", "active", "history", "source_policies"})
                 or type(doc["schema_version"]) is not int or doc["schema_version"] != 1
                 or not isinstance(doc["active"], list) or len(doc["active"]) > 300
                 or not isinstance(doc["history"], list) or len(doc["history"]) > 100):
@@ -58,6 +62,14 @@ class IncidentStore:
             if key in keys or entry["status"] == "resolved":
                 raise ValueError("duplicate active incident")
             keys.add(key)
+        policies = validate_fingerprints(doc.get("source_policies", {}))
+        if self.sources is not None:
+            current = scope_fingerprints(self.sources())
+            policies = {name: digest for name, digest in policies.items()
+                        if name in current and current[name] == digest}
+            for key in ("active", "history"):
+                doc[key] = [entry for entry in doc[key] if entry["source"] in policies]
+        doc["source_policies"] = policies
         return doc
 
     def _write(self, doc):
@@ -81,6 +93,11 @@ class IncidentStore:
             raise ValueError("invalid version")
         doc = self._load()
         original = json.dumps(doc, sort_keys=True)
+        if self.sources is not None:
+            policies = scope_fingerprints(self.sources())
+            if source not in policies:
+                raise ValueError("unknown source")
+            doc["source_policies"][source] = policies[source]
         now = self.clock()
         validation = status.get("validation")
         for kind in sorted(KINDS):
@@ -109,8 +126,12 @@ class IncidentStore:
             elif entry:
                 if kind == "login_invalid" and version and version != entry["snapshot_version"]:
                     if problem:
-                        entry.update(snapshot_version=version, status="open", acknowledged=False,
-                                     snoozed_until=None, updated_at=now)
+                        disposition = ("acknowledged" if entry["acknowledged"] else
+                                       "snoozed" if entry["snoozed_until"] is not None
+                                       and entry["snoozed_until"] > now else "open")
+                        entry.update(snapshot_version=version, status=disposition, updated_at=now)
+                        if disposition != "snoozed":
+                            entry["snoozed_until"] = None
                     elif entry["status"] != "awaiting_validation":
                         entry.update(status="awaiting_validation", updated_at=now)
                 elif (entry["status"] == "snoozed" and entry["snoozed_until"] <= now):
@@ -148,7 +169,11 @@ class IncidentStore:
     def forget(self, names) -> None:
         if not self.path.exists():
             return
-        doc = self._load()
+        try:
+            doc = self._load()
+        except (OSError, ValueError, TypeError, OverflowError):
+            return
         for key in ("active", "history"):
             doc[key] = [e for e in doc[key] if e["source"] not in names]
+        doc["source_policies"] = {k: v for k, v in doc["source_policies"].items() if k not in names}
         self._write(doc)

@@ -66,3 +66,32 @@ def test_tag_health_isolation_and_scope_change(tmp_path):
     assert child.status()["clientHealth"]["sources"] == {}
     assert "client_health" in root.document()["capabilities"]
     assert json.loads((child.data_dir / ".client-health.json").read_text())["sources"] == {}
+
+
+@pytest.mark.parametrize("sources", [{}, {"other": {"domains": ["other.test"]}},
+                                    {"demo": {"domains": ["changed.test"]}}])
+def test_restart_invalidates_health_outside_current_policy_without_writes(tmp_path, sources):
+    state = ReceiverState(SOURCES, tmp_path)
+    state.client_health.accept(payload(), SOURCES)
+    path = tmp_path / ".client-health.json"
+    before = path.read_bytes()
+    restarted = ReceiverState(sources, tmp_path)
+    assert restarted.status()["clientHealth"]["sources"] == {}
+    assert restarted.status()["clientHealth"]["state"] == "not_reported"
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("filename", [".client-health.json", ".incidents.json"])
+def test_corrupt_auxiliary_state_cannot_block_source_removal(tmp_path, filename):
+    state = ReceiverState(SOURCES, tmp_path)
+    (tmp_path / filename).write_text("{broken")
+    state.replace_sources({}, state.revision)
+    assert state.sources == {}
+    assert json.loads(state.sources_path.read_text())["sources"] == {}
+
+
+def test_threshold_edit_retains_policy_bound_health(tmp_path):
+    state = ReceiverState(SOURCES, tmp_path)
+    state.client_health.accept(payload(), SOURCES)
+    restarted = ReceiverState({"demo": {**SOURCES["demo"], "stale_after_seconds": 60}}, tmp_path)
+    assert restarted.status()["clientHealth"]["sources"]["demo"]["approved"] is True

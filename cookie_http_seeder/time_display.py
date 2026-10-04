@@ -8,6 +8,7 @@ from typing import Any
 # Only format documented display fields, never arbitrary text, IDs or credentials.
 ISO_TIME_FIELDS = frozenset({
     "updatedAt", "observedAt", "lastSeenAt", "checkedAt", "lastPushAt",
+    "receivedAt", "last_success_at", "opened_at", "updated_at", "snoozed_until",
 })
 _AWARE_ISO = re.compile(
     r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})"

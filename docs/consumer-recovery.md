@@ -1,4 +1,4 @@
-# 爬虫接入、登录判定与暂停恢复（0.4.0）
+# 爬虫接入、登录判定与暂停恢复（0.5.0）
 
 正常请求 → 明确的站点判定 → 使用实际 Cookie 版本反馈。
 确认 invalid → 持久化暂停 → 浏览器重新登录并推送 → 新版本先验证 → valid 后恢复。
@@ -66,7 +66,8 @@ JSON 键路径为 1–16 个键；每组最多 32 条。模板 `examples/respons
 - 缺失、清空、无适用 Cookie 抛 `CredentialsUnavailable`；不得回退到另一个标签。
 - `wait_for_update(url, timeout=300, poll_interval=5)` 有限等待可用新版本，返回 True 不代表登录有效。
 - 反馈先持久化，再尝试发送；`feedback_status=pending` 时可调用 `flush_feedback()`。
-- 一个报告累计最多三次尝试；`exhausted` 需检查连接后重新进行有意义的验证，不紧密重试。
+- outbox最多16条，按版本合并；同一版本共用最多三次尝试预算，不通过新请求重置。
+- 鉴权/协议/配置终止错误blocked；网络错误pending；exhausted需人工检查。旧记录只在409或本地接收端版本证据下丢弃，不静默覆盖invalid反馈。
 - 旧版本反馈 409 标记为 discarded，新版本验证记录不被覆盖。
 - helper 保留请求响应供调用方使用，但不会把响应放进 repr、状态文件或反馈。
 - 网络/限流错误不被当成登录失效；调用方按 outcome 决定普通任务重试策略。
@@ -91,3 +92,33 @@ Token 从环境或服务同根目录文件读取；显式路径用 `--token-file
 `status --all-senders --json`、鉴权 `GET /v1/senders` 和扩展概览只显示元数据；
 爬虫须显式选择标签，账号切换需要业务侧明确决策。
 飞书 invalid 提醒已由反馈触发，0.4 增加长期未同步提醒；浏览器提醒和低频同步恢复须自行开启。
+
+## 0.5 正式 CLI 与只读查询
+
+```bash
+cookie-http-seeder --data-dir ./data consume mysite --sender-tag home-pc \
+  --url https://example.com/account --rules /private/mysite-rules.json \
+  --endpoint http://127.0.0.1:18765 --state-path /private/consumer.json \
+  --wait-seconds 300 --poll-seconds 5
+cookie-http-seeder --data-dir ./data consumer-status mysite --sender-tag home-pc \
+  --endpoint http://127.0.0.1:18765 --state-path /private/consumer.json
+cookie-http-seeder --data-dir ./data consumer-flush mysite --sender-tag home-pc \
+  --endpoint http://127.0.0.1:18765 --state-path /private/consumer.json
+```
+
+正式CLI退出码：0=明确valid；2=缺失/清空/不适用凭据；3=需登录或等待超时；
+4=站点验证异常；1=配置、状态锁或运行错误。与旧示例脚本退出码分开。
+输出只含受控原因、版本、反馈与暂停状态，不含URL、凭据或正文。
+等待0–86400秒、轮询0.1–3600秒，网络无自动重定向、响应上限1MiB。
+
+`consumer-status` 不读取Cookie或Token，不联网，不创建目录、锁或文件；只在内存解释旧schema。
+同样的数据根/endpoint/标签/来源决定身份；更改它们或把状态文件交给其他账号会拒绝身份不匹配。
+`consumer-flush` 才加载Token并尝试最多一条反馈，累计预算先持久化。
+
+## 登录事件与处置
+
+invalid建立`login_invalid`事件；确认、静默不会恢复暂停。
+新快照进入`awaiting_validation`，只有不同于失效版本的实际valid反馈关闭事件。
+`validation_expired`与`snapshot_stale`独立；未同步或验证过期不等于登录失效。
+普通状态查询不推进事件；接收端写入/反馈与低频扫描推进状态，即使未启用通知也记录。
+面板可按事件ID确认、静默1小时或重新提醒；CLI/API见[协议文档](api.md)。

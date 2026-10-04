@@ -100,16 +100,16 @@
 
 **Files:** pyproject、manifest、README、CHANGELOG、协议/consumer/upgrade/部署文档、builder/CI和验收矩阵。
 
-- [ ] 对齐0.5.0，更新能力协商、迁移、使用/升级说明及scope限制。
-- [ ] 运行全Python/Node、Ruff、source-sync；构建wheel和extension ZIP并从checkout外导入wheel。
-- [ ] 逐项核对R1–R5、重构、迁移、受控浏览器和打包证据，不能用通过测试数量替代交付。
-- [ ] 一次独立整分支审查；只对真实发现追加聚焦修复/验证。
-- [ ] 提交构建哈希和最终矩阵，提供可审阅代码/发布结果；准备具体生产及Grok客户端升级动作供用户最终批准。
+- [x] 对齐0.5.0，更新能力协商、迁移、使用/升级说明及scope限制。
+- [x] 运行全Python/Node、Ruff、source-sync；构建wheel和extension ZIP并从checkout外导入wheel。
+- [x] 逐项核对R1–R5、重构、迁移、受控浏览器和打包证据，不能用通过测试数量替代交付。
+- [x] 一次独立整分支审查；只对真实发现追加聚焦修复/验证。
+- [x] 提交构建哈希和最终矩阵，提供可审阅代码/发布结果；准备具体生产及Grok客户端升级动作供用户最终批准。
 
 ## 当前证据与执行状态
 
 - 基线：main `43e591f`；Python282通过（26.82秒），Node230通过（421毫秒）。
 - 隔离路径：`/home/kun/.codex/worktrees/crawler-session-recovery/cookie-http-seeder`。
 - 分支：`codex/full-upgrade-0.5.0`；只使用现有工具/依赖，没有生产改动。
-- 已开始Task 1；勾选项和执行ledger记录实际进度。实现由主线程直接执行，只有结尾一次独立审查。
-- 当前完成判定和逐项所需证据见 `docs/superpowers/reviews/2026-10-04-full-upgrade-audit.md`。用户本轮“确认”，进入产品实现。
+- Task 1–7完成；最终337项Python/246项Node通过，构建与一次审查修复证据见最终矩阵。主线程唯一写者。
+- 当前完成判定和逐项所需证据见 `docs/superpowers/reviews/2026-10-04-full-upgrade-audit.md`。生产与Grok本版本更新动作已备好，等待最终具体批准。

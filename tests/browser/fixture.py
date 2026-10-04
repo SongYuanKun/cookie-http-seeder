@@ -53,7 +53,8 @@ def main():
     (args.data_dir / "sources.json").write_text(json.dumps({"sources": state.sources}))
     (args.data_dir / "cookie-receiver.token").write_text(TOKEN)
     (args.data_dir / "cookie-receiver.token").chmod(0o600)
-    receiver = ThreadingHTTPServer(("127.0.0.1", args.receiver_port), build_handler(TOKEN, state=state))
+    receiver = ThreadingHTTPServer(("127.0.0.1", args.receiver_port),
+                                   build_handler(TOKEN, state=state))
     servers = (site, receiver)
     workers = [threading.Thread(target=s.serve_forever, kwargs={"poll_interval": .01})
                for s in servers]

@@ -128,3 +128,32 @@ def test_scan_tracks_incidents_without_notifications_and_ack_suppresses(tmp_path
     (tmp_path / "feishu-webhook").write_text("synthetic")
     StaleMonitor(state, enabled=True, notifier=lambda **kw: calls.append(kw)).scan()
     assert not calls
+
+
+@pytest.mark.parametrize("sources", [{}, {"other": {"domains": ["other.test"]}},
+                                    {"site": {"domains": ["changed.test"]}}])
+def test_restart_hides_incidents_outside_current_policy_without_writes(tmp_path, sources):
+    state = ReceiverState({"site": {"domains": ["example.com"]}}, tmp_path)
+    invalid(state, push(state)["snapshot_version"])
+    path = tmp_path / ".incidents.json"
+    before = path.read_bytes()
+    restarted = ReceiverState(sources, tmp_path)
+    assert restarted.incident_status()["active"] == []
+    assert restarted.incident_status()["history"] == []
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("action", ["acknowledge", "snooze"])
+def test_same_unresolved_event_keeps_disposition_after_new_invalid_snapshot(tmp_path, action):
+    store = IncidentStore(tmp_path, clock=lambda: 1000)
+    store.observe("site", {"snapshot_version": "a" * 32, "validation": "invalid"})
+    first = store.list()["active"][0]
+    store.act("site", first["incident_id"], action, 60 if action == "snooze" else None)
+    store.observe("site", {"snapshot_version": "b" * 32, "validation": "unverified"})
+    assert store.list()["active"][0]["status"] == "awaiting_validation"
+    store.observe("site", {"snapshot_version": "b" * 32, "validation": "invalid"})
+    current = store.list()["active"][0]
+    assert current["incident_id"] == first["incident_id"]
+    assert current["snapshot_version"] == "b" * 32
+    assert current["status"] == ("acknowledged" if action == "acknowledge" else "snoozed")
+    assert not store.may_notify("site", "login_invalid")

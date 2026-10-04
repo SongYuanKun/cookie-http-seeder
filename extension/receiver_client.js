@@ -68,7 +68,8 @@ export async function receiverRequest(settings, path, options = {}) {
     }
     const transient = [408, 429].includes(response.status) || response.status >= 500;
     const retryAfter = Number(response.headers.get("Retry-After"));
-    const hint = terminal[response.status] || [transient ? "server_unavailable" : "request_rejected", `Receiver error HTTP ${response.status}`];
+    const hint = terminal[response.status] || [response.status === 429 ? "rate_limited" :
+      transient ? "server_unavailable" : "request_rejected", `Receiver error HTTP ${response.status}`];
     throw new ReceiverError(...hint, {
       retryable: transient,
       retryAfterMs: Number.isFinite(retryAfter) ? Math.max(0, Math.min(3600, retryAfter)) * 1000 : 0,

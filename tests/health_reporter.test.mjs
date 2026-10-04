@@ -2,6 +2,8 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { HEALTH_ALARM, HealthReporter } from "../extension/health_reporter.js";
 import { DEFAULTS, loadSettings, saveSettings } from "../extension/shared.js";
+import { receiverRequest } from "../extension/receiver_client.js";
+import { QUEUE_KEY, SyncEngine } from "../extension/sync.js";
 
 let settings, api, alarms, posts, reporter, storage, doc, queue, granted;
 beforeEach(() => {
@@ -79,4 +81,29 @@ test("temporary disconnect keeps a scheduled recovery heartbeat", async () => {
   reporter.getSources = async () => doc;
   assert.equal((await reporter.report()).ok, true);
   assert.equal(posts.length, 1);
+});
+
+test("HTTP 429 survives the durable queue and reaches heartbeat as rate_limited", async () => {
+  settings.token = "synthetic-token-01234567";
+  settings.recoveryProbeMinutes = 15;
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("private error", {
+    status: 429, headers: { "Retry-After": "120" },
+  });
+  try {
+    const engine = new SyncEngine({ api, now: () => 1791093600000, random: () => 0,
+      settings: async () => settings, getSources: async () => doc,
+      push: async () => receiverRequest(settings, "/v1/status") });
+    await engine.enqueue(); await engine.runDue();
+    const job = storage[QUEUE_KEY].jobs.site;
+    assert.equal(job.phase, "retrying");
+    assert.equal(job.errorCode, "rate_limited");
+    assert.equal(job.nextAt, 1791093720000);
+    reporter.queue = async () => storage[QUEUE_KEY];
+    await reporter.report();
+    assert.equal(posts[0].sources.site.error_code, "rate_limited");
+    job.phase = "exhausted"; job.attempts = 5; job.probeAt = null;
+    await engine.recover();
+    assert.equal(job.probeAt, 1791094500000);
+  } finally { globalThis.fetch = previousFetch; }
 });
