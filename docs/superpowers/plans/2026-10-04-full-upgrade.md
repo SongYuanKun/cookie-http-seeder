@@ -79,11 +79,11 @@
 
 **Interfaces:** shared保留既有export；runtime消息新增`get-dashboard`；`HealthReporter`和controller由注入Chrome API/clock验证。
 
-- [ ] 写旧settings/队列升级不丢授权、health默认关闭、无capability不上报、权限撤销和连接切换抛弃旧结果测试。
-- [ ] 写alarm重建、休眠后单次报告、禁止读取Cookie用于健康、字段/错误文本不泄露测试。
-- [ ] 运行新增Node测试确认失败，之后拆分shared并实现聚合模型与reporter。
-- [ ] 保留SyncEngine五次上限/CAS/恢复probe及现有LoginMonitor降级路径；统一安全操作枚举。
-- [ ] 运行全部Node测试和builder依赖闭包测试；提交。
+- [x] 写旧settings/队列升级不丢授权、health默认关闭、无capability不上报、权限撤销和连接切换抛弃旧结果测试。
+- [x] 写alarm重建、休眠后单次报告、禁止读取Cookie用于健康、字段/错误文本不泄露测试。
+- [x] 运行新增Node测试确认失败，之后拆分shared并实现聚合模型与reporter。
+- [x] 保留SyncEngine五次上限/CAS/恢复probe及现有LoginMonitor降级路径；统一安全操作枚举。
+- [x] 运行全部Node测试和builder依赖闭包测试；提交。
 
 ## Task 6：管理页、popup、事件操作与受控浏览器闭环
 

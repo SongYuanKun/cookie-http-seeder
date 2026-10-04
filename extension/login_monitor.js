@@ -96,6 +96,12 @@ export class LoginMonitor {
           if (old) old.fingerprint = null;
           continue;
         }
+        const incidentKind = { invalid: "login_invalid", expired: "validation_expired", stale: "snapshot_stale" }[kind];
+        const incidents = remote.incidents?.ok === true && Array.isArray(remote.incidents.active) ? remote.incidents.active : [];
+        const disposed = incidents.some(e => e.source === source && e.kind === incidentKind &&
+          (e.acknowledged === true || e.status === "acknowledged" ||
+            (typeof e.snoozed_until === "string" && Date.parse(e.snoozed_until) > this.now())));
+        if (disposed) continue;
         const fingerprint = `${status.snapshot_version}:${kind}`;
         if (old?.fingerprint === fingerprint || (old && this.now() - old.lastNotifiedAt < COOLDOWN_MS)) continue;
         const tag = senderTag(latest.senderTag || "default");

@@ -1,9 +1,13 @@
 import { loadSettings } from "./shared.js";
 import { RETRY_ALARM, SyncEngine } from "./sync.js";
 import { LOGIN_ALARM, LoginMonitor } from "./login_monitor.js";
+import { HEALTH_ALARM, HealthReporter } from "./health_reporter.js";
+import { RuntimeController } from "./runtime_controller.js";
 const AUTO_ALARM = "cookie-http-seeder-auto-push";
 const engine = new SyncEngine();
 const loginMonitor = new LoginMonitor();
+const healthReporter = new HealthReporter({ queue: () => engine.status() });
+const controller = new RuntimeController({ queue: () => engine.status() });
 
 async function syncAlarm() {
   const settings = await loadSettings();
@@ -41,14 +45,17 @@ async function publish(result, manual = false) {
 }
 async function handle(message) {
   if (message.type === "settings-saved") {
-    await syncAlarm(); await engine.recover(); await loginMonitor.recover(); return { ok: true };
+    await syncAlarm(); await engine.recover(); await loginMonitor.recover();
+    await healthReporter.recover(); return { ok: true };
   }
+  if (message.type === "get-dashboard") return controller.refresh();
+  if (message.type === "source-action") return controller.act(message);
   if (message.type === "sync-status") return { ok: true, queue: await engine.status() };
   await engine.enqueue(message.source ? [message.source] : null, "manual");
   const result = await engine.runDue(); await publish(result, true); return result;
 }
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (sender.id !== chrome.runtime.id || !["push-now", "settings-saved", "sync-status"].includes(message?.type)) return false;
+  if (sender.id !== chrome.runtime.id || !["push-now", "settings-saved", "sync-status", "get-dashboard", "source-action"].includes(message?.type)) return false;
   handle(message).then(sendResponse).catch(() => sendResponse({ ok: false, error: "Operation failed; open diagnostics" }));
   return true;
 });
@@ -56,6 +63,7 @@ chrome.cookies.onChanged.addListener(info => { engine.changed(info).catch(() => 
 chrome.alarms.onAlarm.addListener(alarm => {
   (async () => {
     if (alarm.name === LOGIN_ALARM) { await loginMonitor.check(); return; }
+    if (alarm.name === HEALTH_ALARM) { await healthReporter.report(); return; }
     if (alarm.name === AUTO_ALARM) await engine.enqueue(null, "periodic");
     else if (alarm.name !== RETRY_ALARM) return;
     const result = await engine.runDue(); await publish(result);
@@ -63,7 +71,8 @@ chrome.alarms.onAlarm.addListener(alarm => {
 });
 async function startup() {
   await chrome.storage.local.setAccessLevel({ accessLevel: "TRUSTED_CONTEXTS" });
-  await engine.recover(); await syncAlarm(); await loginMonitor.recover(); await badge();
+  await engine.recover(); await syncAlarm(); await loginMonitor.recover();
+  await healthReporter.recover(); await badge();
 }
 chrome.runtime.onInstalled.addListener(() => { startup().catch(() => {}); });
 chrome.runtime.onStartup.addListener(() => { startup().catch(() => {}); });
