@@ -36,7 +36,9 @@ Create `.github/workflows/native-browser.yml` with manual dispatch and an owned-
 - [x] Implement download of v0.5.0 ZIP from the public release, compare its published and pinned SHA256, extract, then run headed Chrome with a 5-minute job bound.
 - [x] Run one independent read-only review; fix concrete findings and verify them.
 - [x] Push the focused branch and attach PR #10; inspect the successful native job's exact stage and evidence.
-- [ ] Merge after the final commit's required checks pass.
+- [x] Merge after the final commit's required checks pass.
 - [x] Update roadmap/receipts only for requirements actually proven by the real native run.
 
 Review findings fixed before the first Windows run: extract the root-layout ZIP into a dedicated extension directory; authenticate the synthetic receiver and compare every stored setting/approval using the production approval predicate; wait for the owned process exit, kill only its process tree on timeout, and remove its temporary profile. [Windows run 37204759247](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37204759247) passed on Windows Server 2022 with Chrome 154.0.8037.58, runtime extension 0.5.0. The public sanitized receipt records native consent, grant, reload/settings/approval preservation, revocation and owned profile cleanup. Production activation, actual-site recovery, macOS native consent/revocation and external adoption/maintenance remain pending.
+
+PR #10 merged as `132e24dfe5c5975451709402ce2e6f37836b92a7`; all nine jobs in [main CI 37205316585](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37205316585) passed.

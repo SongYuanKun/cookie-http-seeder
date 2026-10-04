@@ -19,7 +19,7 @@ This roadmap tracks user-visible delivery and verified adoption. Internal implem
 - [ ] Verify the actual site's invalid → pause → new snapshot → valid → recovery flow while preserving administrator pauses.
 - [x] Verify macOS native Chrome release installation, Developer Mode, reload and synthetic settings preservation.
 - [x] Verify Windows native Chrome release installation, permission consent/revocation, reload and full settings/approval preservation.
-- [ ] Finish macOS native permission consent and revocation.
+- [ ] Finish macOS native permission consent and revocation. The latest [native consent diagnostic](docs/acceptance/2026-10-04-macos-permission-diagnostic.json) still failed; the correct owned prompt was located, but remote input did not grant the permission. Manual local interaction remains pending.
 
 Crawler code delivery: the independent `codex/cookie-session-recovery` branch contains 21 new tests. The latest clean-worktree suite passed 2509 tests (1 skipped, 38 subtests); 135 focused tests and 11 subtests passed. Production activation and actual-site login acceptance remain pending. The maintainer's unrelated working-directory changes were preserved.
 
