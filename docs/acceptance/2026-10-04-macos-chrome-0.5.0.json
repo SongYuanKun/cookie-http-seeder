@@ -1,0 +1,34 @@
+{
+  "recorded_on": "2026-10-04",
+  "platform": "macOS",
+  "chrome": "Chrome/154.0.8037.97",
+  "release": "v0.5.0",
+  "extension_zip_sha256": "8fb0608719253a13a2c1a07c4e668a223ce0cb3cb0e8e3782ef1ec97b0003b65",
+  "profile_isolated": true,
+  "credentials": "synthetic storage marker only",
+  "installation": {
+    "developer_mode_enabled": true,
+    "runtime_version": "0.5.0"
+  },
+  "reload": {
+    "native_manager_button_clicked": true,
+    "manager_ready_observed": true,
+    "runtime_version": "0.5.0",
+    "synthetic_storage_preserved": true
+  },
+  "permissions": {
+    "optional_hosts_declared": true,
+    "example_host_initially_granted": false,
+    "example_host_granted_after_reload": false,
+    "trusted_click_request_exercised": true,
+    "consent_and_revocation_verified": false
+  },
+  "real_site_login_tested": false,
+  "verified_installation_reload_storage_scope_passed": true,
+  "full_native_acceptance": false,
+  "remaining": [
+    "Native permission consent and revocation",
+    "Windows native Chrome acceptance"
+  ],
+  "diagnosis": "Opening the options page before native manager reload completes can produce ERR_BLOCKED_BY_CLIENT. Waiting for the enabled, non-reloading manager state passed. Native permission consent was not completed and is not counted as a pass."
+}

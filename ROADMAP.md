@@ -14,9 +14,13 @@ This roadmap tracks user-visible delivery and verified adoption. Internal implem
 
 ## Actual crawler and browser acceptance
 
-- [ ] Connect the real Tianjin crawler to snapshot-version feedback and controlled login recovery.
+- [x] Deliver the real Tianjin crawler's opt-in snapshot-version feedback and controlled login recovery on a focused integration branch.
+- [ ] Activate the approved production crawler integration without bypassing administrator pauses.
 - [ ] Verify the actual site's invalid → pause → new snapshot → valid → recovery flow while preserving administrator pauses.
-- [ ] Record Windows and macOS native Chrome installation and permission/reload acceptance.
+- [x] Verify macOS native Chrome release installation, Developer Mode, reload and synthetic settings preservation.
+- [ ] Finish macOS native permission consent/revocation and Windows native Chrome installation, permission and reload acceptance.
+
+Crawler code delivery: the independent `codex/cookie-session-recovery` branch contains 21 new tests. The latest clean-worktree suite passed 2509 tests (1 skipped, 38 subtests); 135 focused tests and 11 subtests passed. Production activation and actual-site login acceptance remain pending. The maintainer's unrelated working-directory changes were preserved.
 
 ## Adoption and maintenance
 
@@ -27,7 +31,7 @@ This roadmap tracks user-visible delivery and verified adoption. Internal implem
 
 Submit a [usage report or issue](https://github.com/SongYuanKun/cookie-http-seeder/issues/new/choose). Public reports must exclude real session data. Project maturity and any JetBrains support decision depend on actual evidence and the program's review.
 
-Delivery evidence: [v0.5.0 release](https://github.com/SongYuanKun/cookie-http-seeder/releases/tag/v0.5.0), [exact-commit CI](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199076796), and [release workflow](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199340334). Downloaded wheel and extension ZIP both match the published SHA256SUMS. Native macOS Chrome 154 loaded the published extension at runtime version 0.5.0 in an isolated profile; its storage/reload verification is incomplete and is not counted as full native acceptance.
+Delivery evidence: [v0.5.0 release](https://github.com/SongYuanKun/cookie-http-seeder/releases/tag/v0.5.0), [exact-commit CI](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199076796), and [release workflow](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199340334). Downloaded wheel and extension ZIP both match the published SHA256SUMS. Native macOS Chrome 154 loaded the published extension at runtime version 0.5.0 in an isolated profile. The native manager reload and synthetic settings preservation passed after waiting for reload completion. Optional example-host permissions remained denied before and after reload; permission consent/revocation and Windows native acceptance remain open. See the [scoped macOS receipt](docs/acceptance/2026-10-04-macos-chrome-0.5.0.json).
 
 ## JetBrains support assessment (2026-10-04)
 
