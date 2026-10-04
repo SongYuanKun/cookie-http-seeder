@@ -1,5 +1,7 @@
 # 0.5.0 全面升级最终验收
 
+> 历史阶段记录：本文记录 2026-10-04 合并和部署前的状态。后续 PR #5 已合并至 main（`8cdb6e2`），GTR 接收端和现有 Grok 扩展均已升级至 0.5.0，保留检查通过。本文中的“待批准/未部署/旧 main”描述仅适用于当时；当前发行状态见 [GitHub Releases](https://github.com/SongYuanKun/cookie-http-seeder/releases)。私有现场验收含主机路径，不作为公开附件上传。
+
 2026-10-04，分支 `codex/full-upgrade-0.5.0`，基线 `43e591f`。
 R1–R5、七项实施任务的代码、文档、受控验收与构建已交付。
 生产安装与Grok现有profile更新是下一步操作；本记录不把开发验收当生产登录恢复。

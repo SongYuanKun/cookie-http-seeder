@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -21,7 +22,8 @@ def test_persist_restart_age_and_permissions(tmp_path):
     assert store.status()["state"] == "not_reported"
     assert store.accept(payload(), SOURCES)["state"] == "recent"
     path = tmp_path / ".client-health.json"
-    assert path.stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":
+        assert path.stat().st_mode & 0o777 == 0o600
     later = ClientHealthStore(tmp_path, clock=lambda: NOW + 2101)
     assert later.status()["state"] == "overdue"
     assert later.status()["ageSeconds"] == 2101

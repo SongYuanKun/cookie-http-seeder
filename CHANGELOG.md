@@ -1,9 +1,10 @@
 # Changelog
 
-重要变更记录。`Unreleased` 表示已进入代码但未在此声明独立发布的变更；
-当前 Python 包和扩展元数据为 `0.5.0`；版本号不代表已有公开 Release 或实际部署。
+重要变更记录。`Unreleased` 表示尚未发行的后续变更。
+公开发行包、校验值和发行日期以 [GitHub Releases](https://github.com/SongYuanKun/cookie-http-seeder/releases) 为准；
+部署状态由实际安装版本和现场验收确定。
 
-## [0.5.0]
+## [0.5.0] - 2026-10-04
 
 ### Added
 

@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 from test_monitoring import push
@@ -53,7 +54,8 @@ def test_actions_persist_and_old_id_rejected(tmp_path):
     assert not store.may_notify("site", "login_invalid")
     reloaded = IncidentStore(tmp_path, clock=lambda: now[0])
     assert reloaded.list()["active"][0]["status"] == "snoozed"
-    assert (tmp_path / ".incidents.json").stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":
+        assert (tmp_path / ".incidents.json").stat().st_mode & 0o777 == 0o600
     now[0] += 61
     assert reloaded.may_notify("site", "login_invalid")
     reloaded.act("site", event["incident_id"], "acknowledge")

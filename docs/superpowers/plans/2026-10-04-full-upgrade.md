@@ -1,5 +1,7 @@
 # 0.5.0 全面升级实施计划
 
+> 历史阶段记录：本文记录 2026-10-04 合并和部署前的状态。后续 PR #5 已合并至 main（`8cdb6e2`），GTR 接收端和现有 Grok 扩展均已升级至 0.5.0，保留检查通过。本文中的“待批准/未部署/旧 main”描述仅适用于当时；当前发行状态见 [GitHub Releases](https://github.com/SongYuanKun/cookie-http-seeder/releases)。私有现场验收含主机路径，不作为公开附件上传。
+
 > **For agentic workers:** Use superpowers:executing-plans to implement this plan task by task. 主线程是唯一写者；按用户 AGENTS 仅在结尾进行一次独立分支审查，禁止逐任务重复审查。步骤以勾选状态记录真实进度。
 
 **Goal:** 完成客户端健康、登录恢复事件、正式爬虫 CLI、持久反馈和统一面板，并重构后端/扩展边界，交付可验证的0.5.0。

@@ -1,0 +1,109 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish after successful CI
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate version and find successful CI for exact tag commit
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import tomllib
+
+          version = tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version']
+          tag = os.environ['RELEASE_TAG']
+          if tag != f'v{version}':
+              raise SystemExit('Release tag must match the package version')
+          notes = pathlib.Path('docs/releases') / f'{tag}.md'
+          if not notes.is_file():
+              raise SystemExit('Versioned release notes are required')
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          tagged = subprocess.check_output(['git', 'rev-parse', f'refs/tags/{tag}^{{commit}}'], text=True).strip()
+          if head != tagged:
+              raise SystemExit('Checkout does not match the existing tag')
+          runs = json.loads(subprocess.check_output([
+              'gh', 'run', 'list', '--workflow', 'ci.yml', '--commit', head,
+              '--limit', '100', '--json', 'databaseId,headSha,event,status,conclusion',
+          ], text=True))
+          successful = [run for run in runs if run['headSha'] == head
+                        and run['event'] == 'push' and run['status'] == 'completed'
+                        and run['conclusion'] == 'success']
+          if not successful:
+              raise SystemExit('The exact tagged commit needs successful push CI before publishing')
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write(f"RELEASE_CI_RUN={successful[0]['databaseId']}\n")
+          PY
+      - name: Download canonical artifacts from verified CI
+        run: |
+          gh run download "$RELEASE_CI_RUN" --name cookie-http-seeder-wheel --dir release-assets
+          gh run download "$RELEASE_CI_RUN" --name cookie-http-seeder-extension --dir release-assets
+      - name: Verify versions and generate checksums
+        run: |
+          python - <<'PY'
+          import email
+          import hashlib
+          import json
+          import pathlib
+          import tomllib
+          import zipfile
+
+          version = tomllib.loads(pathlib.Path('pyproject.toml').read_text(encoding='utf-8'))['project']['version']
+          assets = pathlib.Path('release-assets')
+          wheel = assets / f'cookie_http_seeder-{version}-py3-none-any.whl'
+          extension = assets / f'cookie-http-seeder-extension-{version}.zip'
+          if set(assets.iterdir()) != {wheel, extension}:
+              raise SystemExit('Unexpected or missing release files')
+          with zipfile.ZipFile(wheel) as archive:
+              metadata_files = [name for name in archive.namelist() if name.endswith('.dist-info/METADATA')]
+              if len(metadata_files) != 1:
+                  raise SystemExit('Invalid wheel metadata')
+              metadata = email.message_from_bytes(archive.read(metadata_files[0]))
+              if metadata['Name'] != 'cookie-http-seeder' or metadata['Version'] != version:
+                  raise SystemExit('Wheel version mismatch')
+          with zipfile.ZipFile(extension) as archive:
+              if json.loads(archive.read('manifest.json'))['version'] != version:
+                  raise SystemExit('Extension version mismatch')
+          lines = [f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}'
+                   for path in sorted((wheel, extension))]
+          (assets / 'SHA256SUMS').write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+      - name: Publish verified version
+        run: |
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --verify-tag --title "Cookie HTTP Seeder $RELEASE_TAG" \
+            --notes-file "docs/releases/$RELEASE_TAG.md"

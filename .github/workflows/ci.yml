@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: read
 on:
   push:
     branches: [main, "feat/**", "codex/**"]
@@ -6,10 +8,14 @@ on:
     branches: [main]
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
@@ -37,7 +43,7 @@ jobs:
           python scripts/build_extension.py
           python -m pip wheel . --no-deps --wheel-dir dist
       - name: Upload versioned client
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: cookie-http-seeder-extension
@@ -46,12 +52,35 @@ jobs:
       - name: Import installed wheel outside checkout
         if: matrix.python-version == '3.11'
         run: |
-          python -m venv /tmp/seeder-wheel-check
-          /tmp/seeder-wheel-check/bin/pip install --no-deps dist/cookie_http_seeder-*.whl
-          cd /tmp
-          /tmp/seeder-wheel-check/bin/python -I -c "from cookie_http_seeder import __version__; from cookie_http_seeder.receiver import ReceiverState; from cookie_http_seeder.consumer_cli import send_request; assert __version__ == '0.5.0'"
+          python - <<'PY'
+          import os
+          import pathlib
+          import subprocess
+          import tempfile
+          import tomllib
+          import venv
+
+          root = pathlib.Path.cwd()
+          version = tomllib.loads((root / 'pyproject.toml').read_text(encoding='utf-8'))['project']['version']
+          wheels = list((root / 'dist').glob('cookie_http_seeder-*.whl'))
+          assert len(wheels) == 1
+          with tempfile.TemporaryDirectory(prefix='seeder-wheel-') as temporary:
+              outside = pathlib.Path(temporary)
+              environment = outside / 'venv'
+              venv.EnvBuilder(with_pip=True).create(environment)
+              python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+              subprocess.run([str(python), '-m', 'pip', 'install', '--no-index', '--no-deps', str(wheels[0])], check=True)
+              probe = (
+                  'import importlib.metadata as m; from cookie_http_seeder import __version__; '
+                  'from cookie_http_seeder.receiver import ReceiverState; '
+                  'from cookie_http_seeder.consumer_cli import send_request; '
+                  f'assert __version__ == m.version("cookie-http-seeder") == {version!r}'
+              )
+              subprocess.run([str(python), '-I', '-c', probe], cwd=outside, check=True)
+              subprocess.run([str(python), '-I', '-m', 'cookie_http_seeder', '--help'], cwd=outside, check=True)
+          PY
       - name: Upload Python wheel
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.11' && matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v4
         with:
           name: cookie-http-seeder-wheel
