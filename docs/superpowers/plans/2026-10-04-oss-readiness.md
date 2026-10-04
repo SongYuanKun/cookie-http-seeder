@@ -18,8 +18,8 @@ Deliver a public v0.5.0 distribution, accurate current documentation, verified W
 ## Tasks
 
 - [x] Task 1: Correct current README/SECURITY/CHANGELOG and label pre-rollout documents as historical; add SUPPORT, code of conduct, public roadmap and a sanitized onboarding case.
-- [ ] Task 2: Run Python 3.11/3.12/3.13 and Node tests on Ubuntu, Windows and macOS; build and import the installed wheel outside the checkout on all three platforms; retain canonical Ubuntu artifacts.
-- [ ] Task 3: Add tag/manual release automation that checks the exact commit's successful CI, validates the version, downloads canonical artifacts, and publishes their SHA256SUMS. Merge only after the cross-platform gate passes, then create v0.5.0 and inspect the published assets.
+- [x] Task 2: Run Python 3.11/3.12/3.13 and Node tests on Ubuntu, Windows and macOS; build and import the installed wheel outside the checkout on all three platforms; retain canonical Ubuntu artifacts.
+- [x] Task 3: Add tag/manual release automation that checks the exact commit's successful CI, validates the version, downloads canonical artifacts, and publishes their SHA256SUMS. Merge only after the cross-platform gate passes, then create v0.5.0 and inspect the published assets.
 - [ ] Task 4: Integrate the real Tianjin crawler's atomic snapshot version, invalid/valid feedback, same-version pause and new-version validation. Test isolated state first; inspect production pause policy before live acceptance.
 - [ ] Task 5: Publish useful roadmap/feedback issues and a reproducible onboarding case; collect independently verifiable real-user feedback and subsequent maintenance evidence.
 
@@ -41,3 +41,9 @@ Deliver a public v0.5.0 distribution, accurate current documentation, verified W
 ## Local verification (2026-10-04)
 
 Python 3.11 suite: 337 passed; Node suite: 246 passed; Ruff and default-source sync passed. Both workflow YAML files parse, the matrix has nine combinations, 32 repository Markdown files have no unresolved local links, and a mismatched release tag is rejected before network/publishing. Hosted OS jobs and public release remain pending.
+
+## Public delivery (2026-10-04)
+
+PR #6 merged as `e9a93981ed827ea299c131a2c79917f244971260`. All nine jobs in [main CI 37199076796](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199076796) succeeded, including each OS's installed-wheel probe. Tag v0.5.0 identifies that commit. [Release workflow 37199340334](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199340334) published the canonical artifacts and SHA256SUMS; both downloaded assets verified against it.
+
+The actual crawler has a separate focused integration patch in the maintainer's existing working directory; production activation and live site verification are still pending. Native macOS Chrome loaded the release extension in an isolated profile, but storage/reload verification is incomplete. No independent external feedback or sustained maintenance evidence has been fabricated.
