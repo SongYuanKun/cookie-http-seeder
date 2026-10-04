@@ -19,6 +19,8 @@ npm test
 
 Windows 将 `.venv/bin/` 换成 `.venv\Scripts\`。测试不要使用个人浏览器凭据。
 CI 的 Python/Node 测试包含 mock；真实 Chrome 权限、后台恢复和跨系统部署要另做验收。
+CI 的 Python 版本矩阵覆盖 Ubuntu、Windows 和 macOS；各系统校验 wheel 的实际安装和 checkout 外导入。
+公开任务见 [路线图](ROADMAP.md)，使用问题见 [支持入口](SUPPORT.md)，参与时遵守 [行为准则](CODE_OF_CONDUCT.md)。
 
 ## 配置与文档同步
 
@@ -43,7 +45,8 @@ README 快速开始、examples/README、docs/deploy、CHANGELOG、SECURITY，以
 
 | 路径 | 职责 |
 |---|---|
-| `cookie_http_seeder/receiver.py` | 鉴权、按标签路由与接收端管理 |
+| `cookie_http_seeder/receiver.py` | 接收端公开兼容入口 |
+| `cookie_http_seeder/receiver_http.py` / `receiver_state.py` / `receiver_service.py` | HTTP 路由、领域状态与服务生命周期 |
 | `cookie_http_seeder/senders.py` | 标签校验、目录与枚举 |
 | `cookie_http_seeder/store.py` / `cookies.py` | 结构化快照、按 URL 读取 |
 | `cookie_http_seeder/sync_state.py` | 条件写入、幂等、反馈与新鲜度 |

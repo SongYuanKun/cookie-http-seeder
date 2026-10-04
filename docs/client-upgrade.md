@@ -6,6 +6,10 @@
 
 ## 获取经过检查的客户端
 
+优先从 [对应版本 Release](https://github.com/SongYuanKun/cookie-http-seeder/releases/tag/v0.5.0)
+下载 `cookie-http-seeder-extension-0.5.0.zip`、Python wheel 和 `SHA256SUMS`，先校验 SHA256。
+发行自动化只接受版本匹配、精确提交 CI 成功的构建产物。自行从源码构建时执行：
+
 ```bash
 git pull --ff-only origin main
 python3 scripts/build_extension.py

@@ -35,6 +35,9 @@
 ## 快速开始
 
 要求 Python 3.11+、Chrome/Chromium 120+；开发测试另外使用 Node.js 22。
+正式安装包见 [GitHub Releases](https://github.com/SongYuanKun/cookie-http-seeder/releases)。
+每个版本提供 Python wheel、扩展 ZIP 和 `SHA256SUMS`；校验后用 `python -m pip install --no-deps <wheel>` 安装。
+扩展 ZIP 解压后加载包含 `manifest.json` 的目录。源码安装和开发步骤如下。
 在仓库根目录执行，Python 虚拟环境路径在 Windows 下改用 `.venv\Scripts\`：
 
 ```bash
@@ -256,7 +259,7 @@ invalid 和长期未同步飞书提醒分别按标签/来源冷却 15 分钟；�
 不要把显示字符串写回协议。服务器或容器使用 UTC 时不会自动变成北京时间，见 [时间显示](docs/time-display.md)。
 
 升级前先停止旧接收端并保护好数据备份，更新 Python 包和扩展，重启服务并重新加载扩展。
-使用 `python scripts/build_extension.py` 生成 `dist/cookie-http-seeder-extension-0.4.0.zip`，
+使用 `python scripts/build_extension.py` 生成 `dist/cookie-http-seeder-extension-0.5.0.zip`，
 或下载对应提交 CI 的 `cookie-http-seeder-extension` artifact。更新原加载目录并重新加载扩展，
 设置页显示客户端版本；新接收端 `/healthz`、配置和状态响应包含 `receiver_version`。
 具体客户端更新与验收见 [升级说明](docs/client-upgrade.md)。
@@ -279,7 +282,8 @@ ruff check cookie_http_seeder tests scripts
 python scripts/sync_extension_sources.py --check
 ```
 
-CI 使用 Python 3.11/3.12/3.13 和 Node 22。Chrome API mock 测试不代替真实浏览器授权、
+CI 在 Linux、Windows、macOS 使用 Python 3.11/3.12/3.13 和 Node 22，
+各系统另构建并在 checkout 外安装、导入 wheel。Chrome API mock 测试不代替真实浏览器授权、
 后台唤醒或 Windows/macOS 实机验收；以具体提交的 Actions 结果为准。
 同步脚本只核对包内与示例默认值，不再生成扩展站点权限。
 
@@ -291,13 +295,15 @@ CI 使用 Python 3.11/3.12/3.13 和 Node 22。Chrome API mock 测试不代替真
 |---|---|
 | [发送端标签](docs/sender-tags.md) | 分组、协议兼容、标签切换和读取 |
 | [爬虫接入](docs/consumer-recovery.md) | 完整反馈、站点规则、失效暂停和更新后恢复 |
-| [客户端升级](docs/client-upgrade.md) | 0.4.0 构建包、保留配置和实机验收 |
+| [客户端升级](docs/client-upgrade.md) | 0.5.0 发行包、保留配置和实机验收 |
 | [部署指南](docs/deploy.md) | Docker、systemd、数据目录和更新 |
 | [时间显示](docs/time-display.md) | 当地时间与机器格式边界 |
 | [完整性补全](docs/completeness-review.md) | 启动修复、单实例锁、授权撤销和状态面板 |
 | [第二阶段协议](docs/phase2.md) | 条件写入、重试、状态反馈；结合标签说明阅读 |
 | [第一阶段记录](docs/phase1.md) | 历史 0.2 结构化 Cookie 规则，不单独作为当前协议 |
 | [示例](examples/README.md) / [贡献指南](CONTRIBUTING.md) | 消费接入与开发检查 |
-| [安全说明](SECURITY.md) / [变更记录](CHANGELOG.md) | 信任边界与尚未独立发布的变更 |
+| [安全说明](SECURITY.md) / [变更记录](CHANGELOG.md) | 信任边界、支持版本和变更 |
+| [接入案例](docs/onboarding.md) / [支持](SUPPORT.md) | 从安装到版本绑定反馈、问题反馈 |
+| [路线图](ROADMAP.md) / [行为准则](CODE_OF_CONDUCT.md) | 公开待办与参与约定 |
 
 MIT — see [LICENSE](LICENSE)。
