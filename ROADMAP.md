@@ -2,6 +2,8 @@
 
 This roadmap tracks user-visible delivery and verified adoption. Internal implementation plans are historical engineering records. Checkboxes describe evidence, not the size of the codebase or eligibility for a sponsorship program.
 
+Scope clarified on 2026-10-05: repository development and browser acceptance are tracked separately from downstream application deployment and ongoing community evidence. Completing this repository's code does not prove a downstream site's login works or that sponsorship criteria have been met.
+
 ## v0.5.0 delivery
 
 - [x] Version-bound snapshots and crawler feedback; durable feedback outbox.
@@ -12,18 +14,23 @@ This roadmap tracks user-visible delivery and verified adoption. Internal implem
 - [x] Public v0.5.0 tag, wheel, extension ZIP and checksums from successful exact-commit CI.
 - [x] Windows/macOS/Linux CI and installed-wheel verification.
 
-## Actual crawler and browser acceptance
+## Repository browser acceptance
 
-- [x] Deliver the real Tianjin crawler's opt-in snapshot-version feedback and controlled login recovery on a focused integration branch.
-- [ ] Activate the approved production crawler integration without bypassing administrator pauses.
-- [ ] Verify the actual site's invalid → pause → new snapshot → valid → recovery flow while preserving administrator pauses.
 - [x] Verify macOS native Chrome release installation, Developer Mode, reload and synthetic settings preservation.
 - [x] Verify Windows native Chrome release installation, permission consent/revocation, reload and full settings/approval preservation.
 - [ ] Finish macOS native permission consent and revocation. The latest [native consent diagnostic](docs/acceptance/2026-10-04-macos-permission-diagnostic.json) still failed; the correct owned prompt was located, but remote input did not grant the permission. Manual local interaction remains pending.
 
-Crawler code delivery: the independent `codex/cookie-session-recovery` branch contains 21 new tests. The latest clean-worktree suite passed 2509 tests (1 skipped, 38 subtests); 135 focused tests and 11 subtests passed. Production activation and actual-site login acceptance remain pending. The maintainer's unrelated working-directory changes were preserved.
+The remaining browser gate needs an online Mac and local interaction with the isolated test profile's native Allow prompt. It is still unverified; passing CI or changing a checkbox cannot complete it.
+
+## Downstream integration status (outside this repository's task scope)
+
+The real Tianjin crawler's opt-in snapshot-version feedback and controlled login recovery were delivered on its independent `codex/cookie-session-recovery` branch, with 21 new tests. The latest clean-worktree suite passed 2509 tests (1 skipped, 38 subtests); 135 focused tests and 11 subtests passed. The maintainer's unrelated working-directory changes were preserved.
+
+Production activation and the actual site's invalid → pause → new snapshot → valid → recovery acceptance remain pending in that downstream project. They must preserve administrator pauses. Their exclusion from this repository's task scope does not mark them complete.
 
 ## Adoption and maintenance
+
+These are ongoing community outcomes, not unfinished repository implementations. They remain unproven until real external feedback and elapsed maintenance supply evidence.
 
 - [x] Publish onboarding, support channels, contribution guidance and a community code of conduct.
 - [ ] Obtain independently verifiable feedback from a real external user.

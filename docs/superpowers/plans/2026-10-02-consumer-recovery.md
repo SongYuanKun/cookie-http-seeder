@@ -1,5 +1,7 @@
 # Consumer Recovery Implementation Plan
 
+> Historical 0.4.0 implementation plan. Its main delivery and Grok client upgrade were subsequently completed by the 0.5.0 rollout; current task status is tracked in [ROADMAP](../../../ROADMAP.md). The original 0.4.0 client target is superseded, not an outstanding downgrade task.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the agreed crawler feedback/recovery workflow and operational enhancements, push main and update the browser client through grok bot.
@@ -67,8 +69,10 @@
 - [x] Update accurate feature/compatibility documentation and client version display.
 - [x] Run full Python and Node suites, Ruff, source sync check and isolated package/extension artifact validation.
 - [x] One independent whole-branch review; fix concrete findings with regression tests.
-- [ ] Commit, fetch latest main, integrate without force and push; verify remote SHA and CI.
-- [ ] Send grok bot the exact update task after identity is verified; verify target client's 0.4.0 version and preserve connection/consent.
+- [x] Commit, fetch latest main, integrate without force and push; verify remote SHA and CI. Completed by the subsequent 0.5.0 delivery.
+- [x] Complete the identity-verified Grok client upgrade and preserve connection/consent. The original 0.4.0 target was superseded by the installed 0.5.0 client.
+
+Delivery evidence: [PR #5](https://github.com/SongYuanKun/cookie-http-seeder/pull/5) merged the 0.5.0 implementation; [v0.5.0](https://github.com/SongYuanKun/cookie-http-seeder/releases/tag/v0.5.0) was published from [successful exact-commit CI](https://github.com/SongYuanKun/cookie-http-seeder/actions/runs/37199076796). The [rollout record](../reviews/2026-10-04-0.5-rollout.md) records the completed receiver and existing Grok extension upgrade with preservation checks. The private receipt confirms client and receiver version 0.5.0 and preservation of the original profile, connection settings, token, approval and queue; no credentials are published.
 
 ## Local verification evidence
 
