@@ -34,13 +34,13 @@ R1–R5、七项实施任务的代码、文档、受控验收与构建已交付�
 
 ## 最终验证命令与结果
 
-工作目录：`/home/kun/.codex/worktrees/crawler-session-recovery/cookie-http-seeder`。
+工作目录：隔离的 git worktree（本机路径略）。
 命令在审查修复后的最终代码执行，全部退出0。
 
 | 验证 | 命令/环境 | 结果 |
 |---|---|---|
-| Python 3.11.15 | /home/kun/.local/bin/python3.11 -m pytest | 337 passed，28.34秒 |
-| Python 3.12.3 | /home/kun/vs_code/cookie-http-seeder/.venv/bin/python -m pytest | 337 passed，28.72秒 |
+| Python 3.11.15 | 本机 python3.11 -m pytest | 337 passed，28.34秒 |
+| Python 3.12.3 | 项目 .venv/bin/python -m pytest | 337 passed，28.72秒 |
 | Python 3.13.16 | 临时独立解释器 -m pytest | 337 passed，28.38秒 |
 | Node 22.23.3 | node --test tests/*.test.mjs | 246 passed，0 failed，435.70毫秒 |
 | Ruff | ruff check cookie_http_seeder tests scripts | All checks passed |

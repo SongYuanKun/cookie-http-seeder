@@ -111,7 +111,7 @@
 ## 当前证据与执行状态
 
 - 基线：main `43e591f`；Python282通过（26.82秒），Node230通过（421毫秒）。
-- 隔离路径：`/home/kun/.codex/worktrees/crawler-session-recovery/cookie-http-seeder`。
+- 隔离路径：独立 git worktree（本机路径略）。
 - 分支：`codex/full-upgrade-0.5.0`；只使用现有工具/依赖，没有生产改动。
 - Task 1–7完成；最终337项Python/246项Node通过，构建与一次审查修复证据见最终矩阵。主线程唯一写者。
 - 当前完成判定和逐项所需证据见 `docs/superpowers/reviews/2026-10-04-full-upgrade-audit.md`。生产与Grok本版本更新动作已备好，等待最终具体批准。
