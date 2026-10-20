@@ -147,8 +147,10 @@ def build_handler(expected_token: str, *, state: ReceiverState,
                     result = state.incident_action(
                         self.path.removeprefix("/v1/incidents/"), self._read_json())
                 elif self.command == "POST" and self.path == "/v1/client-health":
+                    # 锁外读完 body：慢客户端不得占住状态锁
+                    body = self._read_json()
                     with state.lock:
-                        result = state.client_health.accept(self._read_json(), state.sources)
+                        result = state.client_health.accept(body, state.sources)
                 elif self.command == "POST" and self.path == "/v1/feedback":
                     result = state.report(self._read_json(), notify=notify)
                 elif self.command == "PUT" and self.path == "/v1/sources":
