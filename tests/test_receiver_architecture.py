@@ -71,3 +71,81 @@ def test_slow_request_body_does_not_hold_state_lock(tmp_path):
             assert json.load(response)["ok"] is True
         slow.sendall(body[10:])
         assert b" 200 " in slow.recv(4096).split(b"\r\n", 1)[0]
+
+
+def test_client_health_reads_body_before_target_sender_lock():
+    """A half-read client-health body must not block its sender's state lock."""
+    body_read_started = threading.Event()
+    finish_body = threading.Event()
+    observer_acquired_lock = threading.Event()
+    accepted = []
+    responses = []
+
+    class ProbeLock:
+        def __init__(self):
+            self._lock = threading.Lock()
+            self.owner = None
+
+        def __enter__(self):
+            self._lock.acquire()
+            self.owner = threading.get_ident()
+            return self
+
+        def __exit__(self, *_args):
+            self.owner = None
+            self._lock.release()
+
+        def owned_by_current_thread(self):
+            return self.owner == threading.get_ident()
+
+    class ClientHealth:
+        def accept(self, payload, sources):
+            assert sender.lock.owned_by_current_thread()
+            accepted.append((payload, sources))
+            return {"ok": True}
+
+    class SenderState:
+        def __init__(self):
+            self.lock = ProbeLock()
+            self.sources = {"demo": {"domains": ["example.test"]}}
+            self.client_health = ClientHealth()
+
+    class RootState:
+        def for_sender(self, tag):
+            assert tag == "target"
+            return sender
+
+    sender = SenderState()
+    handler = object.__new__(build_handler(TOKEN, state=RootState()))
+    handler.command = "POST"
+    handler.path = "/v1/client-health"
+    handler._authorize = lambda: setattr(handler, "sender_tag", "target") or True
+
+    def read_half_body():
+        body_read_started.set()
+        finish_body.wait()
+        return {"schema_version": 1}
+
+    handler._read_json = read_half_body
+    handler._send = lambda code, payload: responses.append((code, payload))
+    request = threading.Thread(target=handler.do_POST)
+
+    def observe_state_lock():
+        with sender.lock:
+            observer_acquired_lock.set()
+
+    observer = threading.Thread(target=observe_state_lock)
+    request.start()
+    try:
+        assert body_read_started.wait(timeout=1)
+        observer.start()
+        assert observer_acquired_lock.wait(timeout=1)
+    finally:
+        finish_body.set()
+        request.join(timeout=1)
+        observer.join(timeout=1)
+
+    assert not request.is_alive()
+    assert not observer.is_alive()
+    assert accepted == [({"schema_version": 1}, sender.sources)]
+    assert responses == [(200, {"ok": True})]
